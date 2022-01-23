@@ -52,7 +52,6 @@
   static mgos_timer_id air_dumper_timerid;
   static mgos_timer_id burning_up_timerid;
   static mgos_timer_id dumper_close_timerid;
-  static mgos_timer_id heat_up_timerid;
   static mgos_timer_id warm_up_timerid;
   static float _start_temp; 
   struct mgos_spi *spi;  
@@ -92,6 +91,7 @@ void air_stop() {
   mgos_gpio_write(WB_air_off_relay_pin, OFF);
 }
 void air_open() {
+  _start_temp = chimney_temp;
   air_stop();
   mgos_gpio_write(WB_air_on_relay_pin, ON);
   dumper_state = ON;
@@ -99,6 +99,7 @@ void air_open() {
 
 }
 void air_close() {
+  _start_temp = 0;
   air_stop();
   mgos_gpio_write(WB_air_off_relay_pin, ON);
   dumper_state = OFF;
@@ -132,13 +133,13 @@ void burning_up_timeout_cb() {
   burning_up_timerid = 0;
 };
 
-void heating_up_timeout_cb() {
-  // таймаут розгону
-  if (feed_temp < _start_temp) { wb_state = WB_state_burning_down; };
-  if (feed_temp > _start_temp) { wb_state = WB_state_run; };
-  mgos_clear_timer(heat_up_timerid);
-  heat_up_timerid = 0;
-};
+// void heating_up_timeout_cb() {
+//   // таймаут розгону
+//   if (feed_temp < _start_temp) { wb_state = WB_state_burning_down; };
+//   if (feed_temp > _start_temp) { wb_state = WB_state_run; };
+//   mgos_clear_timer(heat_up_timerid);
+//   heat_up_timerid = 0;
+// };
 
 void warm_up_timeout_cb() {
   // таймаут передпускового підігріву
@@ -216,7 +217,6 @@ void initialize() {
   air_dumper_timerid = 0;
   burning_up_timerid = 0;
   dumper_close_timerid = 0;
-  heat_up_timerid = 0;
   _start_temp = 0; 
   
   dumper(OFF);
@@ -300,27 +300,20 @@ void wb_tick() {
   } /* burnimg_up */
 
   case WB_state_run: {
-// TO-DO: Змінити алгоритм детекції затухання:
-// Коли відкриваєм заслонку - берем температуру комина
-// Якщо протягом відкритої заслонки т. комина впаде < початкової - затухання
-//
-
-    if ( feed_temp < WB_work_temp && heat_up_timerid == 0 && dumper_state == ON ) {
-      _start_temp = feed_temp;
-      heat_up_timerid = mgos_set_timer(WB_heating_up_timeout, MGOS_TIMER_REPEAT, heating_up_timeout_cb, NULL);
-    };
+    // Якщо протягом відкритої заслонки т. комина впаде < початкової - затухання
+    if ( feed_temp < WB_work_temp && dumper_state == ON && _start_temp > 0 ) {
+      if ( chimney_temp < _start_temp ) { 
+          wb_state = WB_state_burning_down;
+          break; };
+       };
 
     if ( feed_temp >= WB_max_temp ) {
       wb_state = WB_state_overheat;
-      if ( heat_up_timerid != 0 ) { mgos_clear_timer(heat_up_timerid);
-                                    heat_up_timerid = 0; };
       break;
     };
 
     if ( feed_temp >= WB_work_temp && dumper_state == ON ) {
       dumper(OFF);
-      if ( heat_up_timerid != 0 ) { mgos_clear_timer(heat_up_timerid);
-                                    heat_up_timerid = 0; };
     };
     
     if ( feed_temp < (WB_work_temp - WB_gisterezis) && dumper_state == OFF ) { dumper(ON); };
@@ -331,24 +324,23 @@ void wb_tick() {
     // if ( chimney_temp >= WB_chimney_work_temp ) { dumper(ON); };
     if ( chimney_temp < WB_chimney_work_temp && feed_temp < WB_pump_on_temp ) {
       wb_state = WB_state_burning_down;
-      if ( heat_up_timerid != 0 ) { mgos_clear_timer(heat_up_timerid);
-                                    heat_up_timerid = 0; };
-    }
+    };
     
    break;   
   } /* run */
 
   case WB_state_burning_down: {
-// TO-DO: змінити алгоритм повертання в роботу:
-// якщо температура комина стала > записаної при відкритті заслонки - перехід в роботу
 
-// перехід в стоп якщо в режимі затухання температура впала до виключення помпи.
-
-    // якщо температура < work_temp і нема таймера і відкрита заслонка: записати температуру і засетати таймер 
-    if ( feed_temp < WB_work_temp && heat_up_timerid == 0 && dumper_state == ON) {
-      _start_temp = feed_temp;
-      heat_up_timerid = mgos_set_timer(WB_heating_up_timeout, MGOS_TIMER_REPEAT, heating_up_timeout_cb, NULL);
+    if (chimney_temp > _start_temp ) { 
+      wb_state = WB_state_run; 
+      break; 
     };
+    
+    if (feed_temp < WB_pump_on_temp) { 
+      wb_state = WB_state_stop;
+      break;
+    };
+
 
     // насос 
     if ( feed_temp >= WB_pump_on_temp && pump_state == OFF ) { pump(ON); };
@@ -367,19 +359,15 @@ void wb_tick() {
     if ( feed_temp >= WB_work_temp && dumper_state == ON ) {
       dumper(OFF);
       wb_state = WB_state_run;
-      if ( heat_up_timerid != 0 ) {
-        mgos_clear_timer(heat_up_timerid);
-        heat_up_timerid = 0;
-      };
       break;
     }
     
+    // 
     if ( feed_temp < (WB_work_temp - WB_gisterezis) && dumper_state == OFF ) { dumper(ON); };
 
     if ( chimney_temp < WB_chimney_stop_temp ) { 
       wb_state = WB_state_stop;
-      if ( heat_up_timerid != 0 ) { mgos_clear_timer(heat_up_timerid); };
-    }
+    };
 
    break;   
   } /* burning_down */
