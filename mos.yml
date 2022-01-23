@@ -1,0 +1,65 @@
+author: Alex Haivoronsky
+description: Wood boiler control app
+version: 1.0
+
+libs_version: ${mos.version}
+modules_version: ${mos.version}
+mongoose_os_version: ${mos.version}
+
+# Optional. List of tags for online search.
+tags:
+  - c
+
+
+
+# List of files / directories with C sources. No slashes at the end of dir names.
+sources:
+  - src
+
+# List of dirs. Files from these dirs will be copied to the device filesystem
+filesystem:
+  - fs
+
+# Custom configuration entries, settable via "device configuration"
+# Below is a custom firmware configuration example.
+# Uncomment and modify according to your needs:
+
+config_schema:
+  # - ["mqtt.pub", "s", "/getData", { title: "Publish topic" }] #MQTT publisher topic
+  - ["mqtt.sub", "s", "/rio/wboiler/#", { title: "Subscription topic" }] #MQTT subscriber topic
+  - ["spi.enable", true]
+  - ["spi.debug", true]
+
+  - ["feed.sensor.mac", "s", "28:7f:7b:16:a8:01:3c:84", {title: "ROM of sensor on feed pipe"}]
+  - ["ret.sensor.mac", "s", "28:0f:57:23:33:19:01:3c", {title: "ROM of sensor on return pipe"}]
+
+  - ["status.topic", "s", "rio/wboiler/status", {title: "mqtt topic for publish status"}]
+  - ["command.topic", "s", "rio/wboiler/command", {title: "mqtt topic for incoming commands"}]
+
+build_vars:
+  # No HW SPI support on ESP8266, for now.
+  MGOS_ENABLE_SPI_GPIO: 1
+
+conds:
+  - when: build_vars.MGOS_ENABLE_SPI_GPIO == "1"
+    apply:
+      config_schema:
+        - ["spi.miso_gpio", 12]
+        - ["spi.mosi_gpio", 13]
+        - ["spi.sclk_gpio", 14]
+        - ["spi.cs0_gpio", 15]
+
+libs:
+  - origin: https://github.com/mongoose-os-libs/boards
+  - origin: https://github.com/mongoose-os-libs/ca-bundle
+  - origin: https://github.com/mongoose-os-libs/rpc-service-config
+  - origin: https://github.com/mongoose-os-libs/rpc-service-fs
+  - origin: https://github.com/mongoose-os-libs/rpc-uart
+  - origin: https://github.com/mongoose-os-libs/spi
+  - origin: https://github.com/mongoose-os-libs/mqtt
+  - origin: https://github.com/ogajvoronsky/mongoose-os-ds18b20
+  
+
+
+# Used by the mos tool to catch mos binaries incompatible with this file format
+manifest_version: 2017-09-29
