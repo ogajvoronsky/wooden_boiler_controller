@@ -120,6 +120,7 @@ void dumper(bool state) {
 }
 
 void dumper_close_cb() { 
+  // таймаут відкритої заслонки в стопі
   mgos_clear_timer(dumper_close_timerid);
   dumper_close_timerid=0;
   if (wb_state == WB_state_stop) { dumper(OFF); }; 
@@ -132,14 +133,6 @@ void burning_up_timeout_cb() {
   mgos_clear_timer(burning_up_timerid);
   burning_up_timerid = 0;
 };
-
-// void heating_up_timeout_cb() {
-//   // таймаут розгону
-//   if (feed_temp < _start_temp) { wb_state = WB_state_burning_down; };
-//   if (feed_temp > _start_temp) { wb_state = WB_state_run; };
-//   mgos_clear_timer(heat_up_timerid);
-//   heat_up_timerid = 0;
-// };
 
 void warm_up_timeout_cb() {
   // таймаут передпускового підігріву
@@ -341,7 +334,6 @@ void wb_tick() {
       break;
     };
 
-
     // насос 
     if ( feed_temp >= WB_pump_on_temp && pump_state == OFF ) { pump(ON); };
     if ( feed_temp < WB_pump_on_temp && pump_state == ON ) { 
@@ -362,8 +354,11 @@ void wb_tick() {
       break;
     }
     
-    // 
-    if ( feed_temp < (WB_work_temp - WB_gisterezis) && dumper_state == OFF ) { dumper(ON); };
+    // старт розгону
+    if ( feed_temp < (WB_work_temp - WB_gisterezis) && dumper_state == OFF ) {
+       dumper(ON);
+       break; 
+    };
 
     if ( chimney_temp < WB_chimney_stop_temp ) { 
       wb_state = WB_state_stop;
