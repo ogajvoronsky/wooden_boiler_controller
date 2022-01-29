@@ -31,12 +31,13 @@
 /* constants */
 #define WB_temp_resolution 12   // 12-bit resolution
 #define WB_chimney_work_temp 100
-#define WB_chimney_stop_temp 60
-#define WB_work_temp 90
-#define WB_gisterezis 20
-#define WB_max_temp 100
+#define WB_chimney_stop_temp 70
+#define WB_upper_temp 95
+#define WB_lower_temp 80
+#define WB_overheat_temp 110
 #define WB_pump_on_temp 60
-#define WB_air_dumper_open_time 2500   // 3s
+#define WB_dumper_open_time 3000   // 3s
+#define WB_dumper_idle 5               // air dumper 5% open on idle
 #define WB_heating_up_timeout 1200000  // 20m макс. час за який котел має зреагувати на відкриту заслонку
 #define WB_warming_up_timeout 1200000  // 20m макс. час роботи режиму розігріву перед розпалом
 #define WB_warming_up_setpoint 40      // температура до якої розігрівати котел перед розпалом
@@ -46,7 +47,7 @@
 /* vars */
 
   static int wb_state;
-  static bool dumper_state;
+  static int dumper_state;
   static bool burner_state;
   static bool pump_state;
   static float chimney_temp;  
@@ -113,24 +114,22 @@ void pump(bool state) {
   pump_state = state;
 }
 
-void dumper(int8_t state) {
+void dumper(int8_t state) { // state 0-100%
   int new_position;
-  new_position = WB_air_dumper_open_time * state;
-  if ( air_dumper_timerid != 0 ) { return; }
-
-  if ( state > dumper_state ) { 
-    air_open(state - dumper_state); 
-    dumper_state = dumper_state + state;
-    return;
+  new_position = (int) (WB_dumper_open_time * state)/ 100;
+  if ( air_dumper_timerid != 0 && dumper_state == new_position ) { return; }
+  if ( new_position > dumper_state ) { 
+    air_open(new_position - dumper_state); 
   };
-  if ( state == CLOSED )  { 
+  if ( new_position == CLOSED )  { 
     air_close(dumper_state + 2000); // +2с на закрывание
-    dumper_state = CLOSED;
+    dumper_state = new_position;
+    return;
   }; 
-  if ( state < dumper_state ) {
-    air_close(dumper_state - state);
-    dumper_state = dumper_state - state;
+  if ( new_position < dumper_state ) {
+    air_close(dumper_state - new_position);
   };
+  dumper_state = new_position;
 };
 
 void dumper_close_cb() { 
@@ -320,25 +319,27 @@ void wb_tick() {
 // Якщо протягом відкритої заслонки т. комина впаде < початкової - затухання
 //
 
-    if ( feed_temp < WB_work_temp && heat_up_timerid == 0 && dumper_state > CLOSED) {
+    if ( feed_temp < WB_upper_temp && heat_up_timerid == 0 && dumper_state > CLOSED) {
       _start_temp = feed_temp;
       heat_up_timerid = mgos_set_timer(WB_heating_up_timeout, MGOS_TIMER_REPEAT, heating_up_timeout_cb, NULL);
     };
 
-    if ( feed_temp >= WB_max_temp ) {
+    if ( feed_temp >= WB_overheat_temp ) {
       wb_state = WB_state_overheat;
       if ( heat_up_timerid != 0 ) { mgos_clear_timer(heat_up_timerid);
                                     heat_up_timerid = 0; };
       break;
     };
 
-    if ( feed_temp >= WB_work_temp && dumper_state == ON ) {
-      dumper(CLOSED);
+    if ( feed_temp >= WB_upper_temp && dumper_state > WB_dumper_idle ) {
+      dumper(WB_dumper_idle);
       if ( heat_up_timerid != 0 ) { mgos_clear_timer(heat_up_timerid);
                                     heat_up_timerid = 0; };
     };
+    if ( feed_temp < WB_upper_temp-((WB_upper_temp-WB_lower_temp)/2) ) { dumper(100); };
+    if (feed_temp >= WB_upper_temp-((WB_upper_temp-WB_lower_temp)/2) || 
+        feed_temp < WB_upper_temp ) { dumper(30); };
     
-    if ( feed_temp < (WB_work_temp - WB_gisterezis) && dumper_state == OFF ) { dumper(OPEN); };
     // насос 
     if ( feed_temp >= WB_pump_on_temp && pump_state == OFF ) { pump(ON); };
     if ( feed_temp < WB_pump_on_temp && pump_state == ON) { pump(OFF); };
@@ -360,7 +361,7 @@ void wb_tick() {
 // перехід в стоп якщо в режимі затухання температура впала до виключення помпи.
 
     // якщо температура < work_temp і нема таймера і відкрита заслонка: записати температуру і засетати таймер 
-    if ( feed_temp < WB_work_temp && heat_up_timerid == 0 && dumper_state > CLOSED ) {
+    if ( feed_temp < WB_work_temp && heat_up_timerid == 0 && dumper_state > CLOSED {
       _start_temp = feed_temp;
       heat_up_timerid = mgos_set_timer(WB_heating_up_timeout, MGOS_TIMER_REPEAT, heating_up_timeout_cb, NULL);
     };
@@ -374,7 +375,7 @@ void wb_tick() {
     };
           
     // 
-    if ( feed_temp >= WB_max_temp ) { 
+    if ( feed_temp >= WB_overheat_temp ) { 
       wb_state = WB_state_overheat;
       break;
     }
@@ -402,7 +403,7 @@ void wb_tick() {
   case WB_state_overheat: {
     dumper(CLOSED);
     pump(ON);
-    if ( feed_temp < WB_max_temp ) { wb_state = WB_state_run; };
+    if ( feed_temp < WB_overheat_temp ) { wb_state = WB_state_run; };
    break;   
   } /* overheat */
 
