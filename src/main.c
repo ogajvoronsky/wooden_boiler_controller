@@ -7,6 +7,9 @@
 /* for gpio. low level = on */
 #define ON false
 #define OFF true
+/* dumper positions */
+#define OPEN 100
+#define CLOSED 0
 
 /* states */
 #define WB_state_stop 0
@@ -28,12 +31,13 @@
 /* constants */
 #define WB_temp_resolution 12   // 12-bit resolution
 #define WB_chimney_work_temp 100
-#define WB_chimney_stop_temp 60
-#define WB_work_temp 90
-#define WB_gisterezis 20
-#define WB_max_temp 100
+#define WB_chimney_stop_temp 70
+#define WB_upper_temp 95
+#define WB_lower_temp 80
+#define WB_overheat_temp 110
 #define WB_pump_on_temp 60
-#define WB_air_dumper_open_time 2500   // 3s
+#define WB_dumper_open_time 3000   // 3s
+#define WB_dumper_idle 5               // air dumper 5% open on idle
 #define WB_heating_up_timeout 1200000  // 20m макс. час за який котел має зреагувати на відкриту заслонку
 #define WB_warming_up_timeout 1200000  // 20m макс. час роботи режиму розігріву перед розпалом
 #define WB_warming_up_setpoint 40      // температура до якої розігрівати котел перед розпалом
@@ -83,7 +87,7 @@ void temperatures_cb(struct ds18b20_result *results) {
     
 };
 
-void air_stop() {
+void air_stop() { // Stop moving air dumper
   if (air_dumper_timerid != 0) { 
     mgos_clear_timer(air_dumper_timerid);
     air_dumper_timerid = 0;
@@ -91,37 +95,47 @@ void air_stop() {
   mgos_gpio_write(WB_air_on_relay_pin, OFF);
   mgos_gpio_write(WB_air_off_relay_pin, OFF);
 }
-void air_open() {
-  air_stop();
+void air_open(u_int16_t t) { // open air dumper for t ms 
   mgos_gpio_write(WB_air_on_relay_pin, ON);
-  dumper_state = ON;
-  air_dumper_timerid = mgos_set_timer(WB_air_dumper_open_time,  MGOS_TIMER_REPEAT, air_stop, NULL);
-
-}
+  air_dumper_timerid = mgos_set_timer(t,  MGOS_TIMER_REPEAT, air_stop, NULL);
+};
 void air_close() {
-  air_stop();
   mgos_gpio_write(WB_air_off_relay_pin, ON);
-  dumper_state = OFF;
   air_dumper_timerid = mgos_set_timer(10000 /* 10s */, MGOS_TIMER_REPEAT, air_stop, NULL);
-
 }
+
 void burner(bool state) {
   mgos_gpio_write(WB_burner_pin, state);
   burner_state = state;
 }
+
 void pump(bool state) {
   mgos_gpio_write(WB_pump_pin, state);
   pump_state = state;
 }
-void dumper(bool state) {
-   if (state == ON && dumper_state == OFF ) { air_open(); };
-   if (state == OFF && dumper_state == ON ) { air_close(); };
-}
+
+void dumper(int8_t state) { // state 0-100%
+  int new_position;
+  new_position = (int) (WB_dumper_open_time * state)/ 100;
+  if ( air_dumper_timerid != 0 && dumper_state == new_position ) { return; }
+  if ( new_position > dumper_state ) { 
+    air_open(new_position - dumper_state); 
+  };
+  if ( new_position == CLOSED )  { 
+    air_close(dumper_state + 2000) // +2с на закрывание
+    dumper_state = new_position;
+    return;
+  }; 
+  if ( new_position < dumper_state ) {
+    air_close(dumper_state - new_position);
+  };
+  dumper_state = new_position;
+};
 
 void dumper_close_cb() { 
   mgos_clear_timer(dumper_close_timerid);
   dumper_close_timerid=0;
-  if (wb_state == WB_state_stop) { dumper(OFF); }; 
+  if (wb_state == WB_state_stop) { dumper(CLOSED); }; 
 }
 
 void burning_up_timeout_cb() {
@@ -207,7 +221,7 @@ void initialize() {
   mgos_gpio_setup_output(WB_burner_pin, OFF);
 
   wb_state = 0;
-  dumper_state = ON;
+  dumper_state = OPEN;
   burner_state = OFF;
   pump_state = OFF;
   chimney_temp = -100;
@@ -219,7 +233,7 @@ void initialize() {
   heat_up_timerid = 0;
   _start_temp = 0; 
   
-  dumper(OFF);
+  dumper(CLOSED);
   // init spi
   spi = mgos_spi_get_global();
   if (spi == NULL) {
@@ -258,7 +272,7 @@ void wb_tick() {
     };
     if ( chimney_temp <= WB_chimney_stop_temp ) {
       if ( pump_state != OFF ) { pump(OFF); };
-      if ( dumper_state == ON && dumper_close_timerid == 0 ) { 
+      if ( dumper_state > CLOSED && dumper_close_timerid == 0 ) { 
           dumper_close_timerid = mgos_set_timer(WB_dumper_close_delay, MGOS_TIMER_REPEAT, dumper_close_cb, NULL);
       };
     };
@@ -268,7 +282,7 @@ void wb_tick() {
   case WB_state_warming_up: {
     if (feed_temp < WB_warming_up_setpoint) {
         pump(ON);
-        dumper(OFF);
+        dumper(CLOSED);
         if ( warm_up_timerid == 0 ) {
           warm_up_timerid = mgos_set_timer(WB_warming_up_timeout, MGOS_TIMER_REPEAT, warm_up_timeout_cb, NULL);
         }
@@ -291,7 +305,7 @@ void wb_tick() {
       burner(OFF);
     } else {
       /* димохід ще холодний */
-      dumper(ON);
+      dumper(OPEN);
       pump(OFF);
       burner(ON);
       if ( burning_up_timerid == 0 ) { burning_up_timerid = mgos_set_timer(WB_burning_up_timeout, MGOS_TIMER_REPEAT, burning_up_timeout_cb, NULL); };
@@ -305,30 +319,32 @@ void wb_tick() {
 // Якщо протягом відкритої заслонки т. комина впаде < початкової - затухання
 //
 
-    if ( feed_temp < WB_work_temp && heat_up_timerid == 0 && dumper_state == ON ) {
+    if ( feed_temp < WB_upper_temp && heat_up_timerid == 0 && dumper_state > CLOSED) {
       _start_temp = feed_temp;
       heat_up_timerid = mgos_set_timer(WB_heating_up_timeout, MGOS_TIMER_REPEAT, heating_up_timeout_cb, NULL);
     };
 
-    if ( feed_temp >= WB_max_temp ) {
+    if ( feed_temp >= WB_overheat_temp ) {
       wb_state = WB_state_overheat;
       if ( heat_up_timerid != 0 ) { mgos_clear_timer(heat_up_timerid);
                                     heat_up_timerid = 0; };
       break;
     };
 
-    if ( feed_temp >= WB_work_temp && dumper_state == ON ) {
-      dumper(OFF);
+    if ( feed_temp >= WB_upper_temp && dumper_state > WB_dumper_idle ) {
+      dumper(Wb_dumper_idle);
       if ( heat_up_timerid != 0 ) { mgos_clear_timer(heat_up_timerid);
                                     heat_up_timerid = 0; };
     };
+    if ( feed_temp < WB_upper_temp-((WB_upper_temp-WB_lower_temp)/2) ) { dumper(100); };
+    if (feed_temp >= WB_upper_temp-((WB_upper_temp-WB_lower_temp)/2) || 
+        feed_temp < WB_upper_temp ) { dumper(30); };
     
-    if ( feed_temp < (WB_work_temp - WB_gisterezis) && dumper_state == OFF ) { dumper(ON); };
     // насос 
     if ( feed_temp >= WB_pump_on_temp && pump_state == OFF ) { pump(ON); };
     if ( feed_temp < WB_pump_on_temp && pump_state == ON) { pump(OFF); };
     // комин
-    // if ( chimney_temp >= WB_chimney_work_temp ) { dumper(ON); };
+    // if ( chimney_temp >= WB_chimney_work_temp ) { dumper(OPEN); };
     if ( chimney_temp < WB_chimney_work_temp && feed_temp < WB_pump_on_temp ) {
       wb_state = WB_state_burning_down;
       if ( heat_up_timerid != 0 ) { mgos_clear_timer(heat_up_timerid);
@@ -345,7 +361,7 @@ void wb_tick() {
 // перехід в стоп якщо в режимі затухання температура впала до виключення помпи.
 
     // якщо температура < work_temp і нема таймера і відкрита заслонка: записати температуру і засетати таймер 
-    if ( feed_temp < WB_work_temp && heat_up_timerid == 0 && dumper_state == ON) {
+    if ( feed_temp < WB_work_temp && heat_up_timerid == 0 && dumper_state > CLOSED {
       _start_temp = feed_temp;
       heat_up_timerid = mgos_set_timer(WB_heating_up_timeout, MGOS_TIMER_REPEAT, heating_up_timeout_cb, NULL);
     };
@@ -359,13 +375,13 @@ void wb_tick() {
     };
           
     // 
-    if ( feed_temp >= WB_max_temp ) { 
+    if ( feed_temp >= WB_overheat_temp ) { 
       wb_state = WB_state_overheat;
       break;
     }
     // заслонка
-    if ( feed_temp >= WB_work_temp && dumper_state == ON ) {
-      dumper(OFF);
+    if ( feed_temp >= WB_work_temp && dumper_state > CLOSED ) {
+      dumper(CLOSED);
       wb_state = WB_state_run;
       if ( heat_up_timerid != 0 ) {
         mgos_clear_timer(heat_up_timerid);
@@ -374,7 +390,7 @@ void wb_tick() {
       break;
     }
     
-    if ( feed_temp < (WB_work_temp - WB_gisterezis) && dumper_state == OFF ) { dumper(ON); };
+    if ( feed_temp < (WB_work_temp - WB_gisterezis) && dumper_state == OFF ) { dumper(OPEN); };
 
     if ( chimney_temp < WB_chimney_stop_temp ) { 
       wb_state = WB_state_stop;
@@ -385,14 +401,14 @@ void wb_tick() {
   } /* burning_down */
 
   case WB_state_overheat: {
-    dumper(OFF);
+    dumper(CLOSED);
     pump(ON);
     if ( feed_temp < WB_max_temp ) { wb_state = WB_state_run; };
    break;   
   } /* overheat */
 
   case  WB_state_sensor_error: {
-    dumper(OFF);
+    dumper(CLOSED);
     burner(OFF);
     pump(OFF);
     wb_state = WB_state_stop; /* пробуєм вернутися в режим */
