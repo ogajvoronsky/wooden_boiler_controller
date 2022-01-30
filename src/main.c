@@ -56,7 +56,6 @@
   static mgos_timer_id air_dumper_timerid;
   static mgos_timer_id burning_up_timerid;
   static mgos_timer_id dumper_close_timerid;
-  static mgos_timer_id heat_up_timerid;
   static mgos_timer_id warm_up_timerid;
   static float _start_temp; 
   struct mgos_spi *spi;  
@@ -144,14 +143,6 @@ void burning_up_timeout_cb() {
   wb_state = WB_state_burning_up_timeout;
   mgos_clear_timer(burning_up_timerid);
   burning_up_timerid = 0;
-};
-
-void heating_up_timeout_cb() {
-  // таймаут розгону
-  if (feed_temp < _start_temp) { wb_state = WB_state_burning_down; };
-  if (feed_temp > _start_temp) { wb_state = WB_state_run; };
-  mgos_clear_timer(heat_up_timerid);
-  heat_up_timerid = 0;
 };
 
 void warm_up_timeout_cb() {
@@ -319,26 +310,29 @@ void wb_tick() {
 // Якщо протягом відкритої заслонки т. комина впаде < початкової - затухання
 //
 
-    if ( feed_temp < WB_upper_temp && heat_up_timerid == 0 && dumper_state > CLOSED) {
-      _start_temp = feed_temp;
-      heat_up_timerid = mgos_set_timer(WB_heating_up_timeout, MGOS_TIMER_REPEAT, heating_up_timeout_cb, NULL);
+    if (chimney_temp < _start_temp ) {
+      wb_state = WB_state_burning_down; 
+      break; 
     };
 
     if ( feed_temp >= WB_overheat_temp ) {
       wb_state = WB_state_overheat;
-      if ( heat_up_timerid != 0 ) { mgos_clear_timer(heat_up_timerid);
-                                    heat_up_timerid = 0; };
       break;
     };
 
     if ( feed_temp >= WB_upper_temp && dumper_state > WB_dumper_idle ) {
+      _start_temp = 0;
       dumper(WB_dumper_idle);
-      if ( heat_up_timerid != 0 ) { mgos_clear_timer(heat_up_timerid);
-                                    heat_up_timerid = 0; };
     };
-    if ( feed_temp < WB_upper_temp-((WB_upper_temp-WB_lower_temp)/2) ) { dumper(100); };
+    if ( feed_temp < WB_upper_temp-((WB_upper_temp-WB_lower_temp)/2) ) { 
+      if (_start_temp == 0) { _start_temp = chimney_temp; };
+      dumper(100); 
+    };
     if (feed_temp >= WB_upper_temp-((WB_upper_temp-WB_lower_temp)/2) || 
-        feed_temp < WB_upper_temp ) { dumper(30); };
+        feed_temp < WB_upper_temp ) { 
+          _start_temp = 0;
+          dumper(30);
+    };
     
     // насос 
     if ( feed_temp >= WB_pump_on_temp && pump_state == OFF ) { pump(ON); };
@@ -355,49 +349,35 @@ void wb_tick() {
   } /* run */
 
   case WB_state_burning_down: {
-// TO-DO: змінити алгоритм повертання в роботу:
-// якщо температура комина стала > записаної при відкритті заслонки - перехід в роботу
 
-// перехід в стоп якщо в режимі затухання температура впала до виключення помпи.
-
-    // якщо температура < work_temp і нема таймера і відкрита заслонка: записати температуру і засетати таймер 
-    if ( feed_temp < WB_work_temp && heat_up_timerid == 0 && dumper_state > CLOSED {
-      _start_temp = feed_temp;
-      heat_up_timerid = mgos_set_timer(WB_heating_up_timeout, MGOS_TIMER_REPEAT, heating_up_timeout_cb, NULL);
+    if (chimney_temp > _start_temp) {
+      wb_state = WB_state_run; 
+      break;
     };
 
     // насос 
-    if ( feed_temp >= WB_pump_on_temp && pump_state == OFF ) { pump(ON); };
+    if ( feed_temp >= WB_pump_on_temp && pump_state == OFF ) { 
+      pump(ON);
+      dumper(100);  
+    };
     if ( feed_temp < WB_pump_on_temp && pump_state == ON ) { 
       pump(OFF);
-      wb_state = WB_state_stop;
-      break;
+      dumper(30);
     };
           
-    // 
     if ( feed_temp >= WB_overheat_temp ) { 
       wb_state = WB_state_overheat;
       break;
     }
-    // заслонка
-    if ( feed_temp >= WB_work_temp && dumper_state > CLOSED ) {
-      dumper(CLOSED);
+    if ( feed_temp >= WB_lower_temp) {
       wb_state = WB_state_run;
-      if ( heat_up_timerid != 0 ) {
-        mgos_clear_timer(heat_up_timerid);
-        heat_up_timerid = 0;
-      };
       break;
     }
-    
-    if ( feed_temp < (WB_work_temp - WB_gisterezis) && dumper_state == OFF ) { dumper(OPEN); };
-
     if ( chimney_temp < WB_chimney_stop_temp ) { 
       wb_state = WB_state_stop;
-      if ( heat_up_timerid != 0 ) { mgos_clear_timer(heat_up_timerid); };
     }
 
-   break;   
+    break;   
   } /* burning_down */
 
   case WB_state_overheat: {
