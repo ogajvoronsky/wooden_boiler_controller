@@ -94,13 +94,13 @@ void air_stop() { // Stop moving air dumper
   mgos_gpio_write(WB_air_on_relay_pin, OFF);
   mgos_gpio_write(WB_air_off_relay_pin, OFF);
 }
-void air_open(u_int16_t t) { // open air dumper for t ms 
+void air_open(uint16_t t) { // open air dumper for t ms 
   mgos_gpio_write(WB_air_on_relay_pin, ON);
   air_dumper_timerid = mgos_set_timer(t,  MGOS_TIMER_REPEAT, air_stop, NULL);
 };
-void air_close() {
+void air_close(uint16_t t) {
   mgos_gpio_write(WB_air_off_relay_pin, ON);
-  air_dumper_timerid = mgos_set_timer(10000 /* 10s */, MGOS_TIMER_REPEAT, air_stop, NULL);
+  air_dumper_timerid = mgos_set_timer(t, MGOS_TIMER_REPEAT, air_stop, NULL);
 }
 
 void burner(bool state) {
@@ -221,7 +221,6 @@ void initialize() {
   air_dumper_timerid = 0;
   burning_up_timerid = 0;
   dumper_close_timerid = 0;
-  heat_up_timerid = 0;
   _start_temp = 0; 
   
   dumper(CLOSED);
@@ -341,8 +340,6 @@ void wb_tick() {
     // if ( chimney_temp >= WB_chimney_work_temp ) { dumper(OPEN); };
     if ( chimney_temp < WB_chimney_work_temp && feed_temp < WB_pump_on_temp ) {
       wb_state = WB_state_burning_down;
-      if ( heat_up_timerid != 0 ) { mgos_clear_timer(heat_up_timerid);
-                                    heat_up_timerid = 0; };
     }
     
    break;   
