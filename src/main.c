@@ -36,7 +36,7 @@
 #define WB_lower_temp 80
 #define WB_overheat_temp 110
 #define WB_pump_on_temp 60
-#define WB_dumper_open_time 3000   // 3s
+#define WB_dumper_open_time 5000   // 3s
 #define WB_dumper_idle 5               // air dumper 5% open on idle
 #define WB_heating_up_timeout 1200000  // 20m макс. час за який котел має зреагувати на відкриту заслонку
 #define WB_warming_up_timeout 1200000  // 20m макс. час роботи режиму розігріву перед розпалом
@@ -116,7 +116,7 @@ void pump(bool state) {
 void dumper(int8_t state) { // state 0-100%
   int new_position;
   new_position = (int) (WB_dumper_open_time * state)/ 100;
-  if ( air_dumper_timerid != 0 && dumper_state == new_position ) { return; }
+  if ( air_dumper_timerid != 0 || dumper_state == new_position ) { return; }
   if ( new_position > dumper_state ) { 
     air_open(new_position - dumper_state); 
   };
@@ -242,8 +242,8 @@ void wb_tick() {
   chimney_temp = read_chimney_temp();
   // ================================================
 
-  sprintf(json_status, "{\"state\":%i,\"dumper\":\"%s\",\"pump\":\"%s\",\"feed\":%.2f,\"return\":%.2f,\"chimney\":%.0f}",
-   wb_state, dumper_state ? "OFF" : "ON", pump_state ? "OFF" : "ON", feed_temp, return_temp, chimney_temp);
+  sprintf(json_status, "{\"state\":%i,\"dumper\":\"%i\",\"pump\":\"%s\",\"feed\":%.2f,\"return\":%.2f,\"chimney\":%.0f}",
+   wb_state, dumper_state, pump_state ? "OFF" : "ON", feed_temp, return_temp, chimney_temp);
   
   LOG(LL_INFO, ("status: %s", json_status));
   // publish status json to mqtt topic
@@ -252,7 +252,9 @@ void wb_tick() {
   switch (wb_state)
   {
   case WB_state_stop: {
-    if ( chimney_temp >= WB_chimney_work_temp || feed_temp >= WB_pump_on_temp ) { 
+    pump(OFF);
+    if ( chimney_temp >= WB_chimney_work_temp ) { 
+      _start_temp = -1 ; // заходим в роботу з таким значенням щоб уникнути хибних переходів в затухання
       wb_state = WB_state_run;
       if (dumper_close_timerid != 0) {
          mgos_clear_timer(dumper_close_timerid);
@@ -261,7 +263,6 @@ void wb_tick() {
       break;
     };
     if ( chimney_temp <= WB_chimney_stop_temp ) {
-      if ( pump_state != OFF ) { pump(OFF); };
       if ( dumper_state > CLOSED && dumper_close_timerid == 0 ) { 
           dumper_close_timerid = mgos_set_timer(WB_dumper_close_delay, MGOS_TIMER_REPEAT, dumper_close_cb, NULL);
       };
@@ -295,7 +296,7 @@ void wb_tick() {
       burner(OFF);
     } else {
       /* димохід ще холодний */
-      dumper(OPEN);
+      dumper(100);
       pump(OFF);
       burner(ON);
       if ( burning_up_timerid == 0 ) { burning_up_timerid = mgos_set_timer(WB_burning_up_timeout, MGOS_TIMER_REPEAT, burning_up_timeout_cb, NULL); };
@@ -304,12 +305,11 @@ void wb_tick() {
   } /* burnimg_up */
 
   case WB_state_run: {
-// TO-DO: Змінити алгоритм детекції затухання:
 // Коли відкриваєм заслонку - берем температуру комина
 // Якщо протягом відкритої заслонки т. комина впаде < початкової - затухання
 //
-
-    if (chimney_temp < _start_temp ) {
+    // комин
+    if (chimney_temp < _start_temp || chimney_temp <= WB_chimney_stop_temp ) {
       wb_state = WB_state_burning_down; 
       break; 
     };
@@ -327,52 +327,46 @@ void wb_tick() {
       if (_start_temp == 0) { _start_temp = chimney_temp; };
       dumper(100); 
     };
-    if (feed_temp >= WB_upper_temp-((WB_upper_temp-WB_lower_temp)/2) || 
+    if (feed_temp >= WB_upper_temp-((WB_upper_temp-WB_lower_temp)/2) && 
         feed_temp < WB_upper_temp ) { 
           _start_temp = 0;
           dumper(30);
     };
     
     // насос 
-    if ( feed_temp >= WB_pump_on_temp && pump_state == OFF ) { pump(ON); };
-    if ( feed_temp < WB_pump_on_temp && pump_state == ON) { pump(OFF); };
-    // комин
-    // if ( chimney_temp >= WB_chimney_work_temp ) { dumper(OPEN); };
-    if ( chimney_temp < WB_chimney_work_temp && feed_temp < WB_pump_on_temp ) {
-      wb_state = WB_state_burning_down;
-    }
-    
+    if ( feed_temp >= WB_pump_on_temp ) { pump(ON); }
+    if ( feed_temp < WB_pump_on_temp ) { pump(OFF); }
+
    break;   
   } /* run */
 
   case WB_state_burning_down: {
-
-    if (chimney_temp > _start_temp) {
+    // комин
+    if (chimney_temp > _start_temp && _start_temp > 0) {
       wb_state = WB_state_run; 
+      break;
+    };
+    if (chimney_temp >= WB_chimney_work_temp) {
+      wb_state = WB_state_run; 
+      break;
+    };
+    if ( chimney_temp <= WB_chimney_stop_temp ) { 
+      wb_state = WB_state_stop;
+      dumper(30);
       break;
     };
 
     // насос 
-    if ( feed_temp >= WB_pump_on_temp && pump_state == OFF ) { 
-      pump(ON);
-      dumper(100);  
+    if (feed_temp < WB_upper_temp) { pump(OFF); };
+    if ( feed_temp > WB_upper_temp ) {
+      wb_state = WB_state_run;
+      break;
     };
-    if ( feed_temp < WB_pump_on_temp && pump_state == ON ) { 
-      pump(OFF);
-      dumper(30);
-    };
-          
+
     if ( feed_temp >= WB_overheat_temp ) { 
       wb_state = WB_state_overheat;
       break;
-    }
-    if ( feed_temp >= WB_lower_temp) {
-      wb_state = WB_state_run;
-      break;
-    }
-    if ( chimney_temp < WB_chimney_stop_temp ) { 
-      wb_state = WB_state_stop;
-    }
+    };
 
     break;   
   } /* burning_down */
@@ -442,8 +436,8 @@ enum mgos_app_init_result mgos_app_init(void) {
   initialize();
   
 // debug
-//  mgos_mqtt_sub("rio/wboiler/chimney_temp", mqtt_chimney_temp_cb, NULL);
-//  mgos_mqtt_sub("rio/wboiler/feed_temp", mqtt_feed_temp_cb, NULL); 
+//  mgos_mqtt_sub("rio/wboiler/wb_chimney_temp_s", mqtt_chimney_temp_cb, NULL);
+//  mgos_mqtt_sub("rio/wboiler/wb_feed_temp_s", mqtt_feed_temp_cb, NULL); 
 // debug
 
 mgos_mqtt_sub(mgos_sys_config_get_command_topic(), mqtt_handler_cb, NULL); 
