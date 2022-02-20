@@ -32,6 +32,7 @@
 #define WB_temp_resolution 12   // 12-bit resolution
 #define WB_chimney_work_temp 100
 #define WB_chimney_stop_temp 70
+#define WB_chimney_high_temp 180 // chimney temp then dumper move to 30%
 #define WB_upper_temp 95
 #define WB_lower_temp 80
 #define WB_overheat_temp 110
@@ -48,6 +49,7 @@
 
   static int wb_state;
   static int dumper_state;
+  static int _dumper_open_position;
   static bool burner_state;
   static bool pump_state;
   static float chimney_temp;  
@@ -222,6 +224,7 @@ void initialize() {
   burning_up_timerid = 0;
   dumper_close_timerid = 0;
   _start_temp = 0; 
+  _dumper_open_position = 100;
   
   dumper(CLOSED);
   // init spi
@@ -309,6 +312,11 @@ void wb_tick() {
 // Якщо протягом відкритої заслонки т. комина впаде < початкової - затухання
 //
     // комин
+    // притискаєм коли вихлоп надто високий
+    if (chimney_temp >= WB_chimney_high_temp ) { _dumper_open_position = 30; };
+    if (chimney_temp < WB_chimney_high_temp - 30 ) { _dumper_open_position = 100; };
+
+
     if (chimney_temp < _start_temp || chimney_temp <= WB_chimney_stop_temp ) {
       wb_state = WB_state_burning_down; 
       break; 
@@ -325,7 +333,7 @@ void wb_tick() {
     };
     if ( feed_temp < WB_upper_temp-((WB_upper_temp-WB_lower_temp)/2) ) { 
       if (_start_temp == 0) { _start_temp = chimney_temp; };
-      dumper(100); 
+      dumper(_dumper_open_position); 
     };
     if (feed_temp >= WB_upper_temp-((WB_upper_temp-WB_lower_temp)/2) && 
         feed_temp < WB_upper_temp ) { 
