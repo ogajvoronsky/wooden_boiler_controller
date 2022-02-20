@@ -42,7 +42,7 @@
 #define WB_warming_up_timeout 1200000  // 20m макс. час роботи режиму розігріву перед розпалом
 #define WB_warming_up_setpoint 40      // температура до якої розігрівати котел перед розпалом
 #define WB_burning_up_timeout  1200000 // 20m макс. час роботи фену розпалу
-#define WB_dumper_close_delay  60000   // 10m час через який закриється заслонка після переходу в стоп
+#define WB_dumper_close_delay  600000   // 10m час через який закриється заслонка після переходу в стоп
 
 /* vars */
 
@@ -98,7 +98,7 @@ void air_open(uint16_t t) { // open air dumper for t ms
   mgos_gpio_write(WB_air_on_relay_pin, ON);
   air_dumper_timerid = mgos_set_timer(t,  MGOS_TIMER_REPEAT, air_stop, NULL);
 };
-void air_close(uint16_t t) {
+void air_close(uint16_t t) { // close air for t ms
   mgos_gpio_write(WB_air_off_relay_pin, ON);
   air_dumper_timerid = mgos_set_timer(t, MGOS_TIMER_REPEAT, air_stop, NULL);
 }
@@ -121,7 +121,7 @@ void dumper(int8_t state) { // state 0-100%
     air_open(new_position - dumper_state); 
   };
   if ( new_position == CLOSED )  { 
-    air_close(dumper_state + 2000); // +2с на закрывание
+    air_close(dumper_state + 2000); // +2sec for shure 
     dumper_state = new_position;
     return;
   }; 
@@ -342,26 +342,23 @@ void wb_tick() {
 
   case WB_state_burning_down: {
     // комин
-    if (chimney_temp > _start_temp && _start_temp > 0) {
-      wb_state = WB_state_run; 
-      break;
-    };
+    dumper(30);
+    // if (chimney_temp >= _start_temp && _start_temp > 0) {
+    //   wb_state = WB_state_run; 
+    //   break;
+    // };
     if (chimney_temp >= WB_chimney_work_temp) {
       wb_state = WB_state_run; 
       break;
     };
     if ( chimney_temp <= WB_chimney_stop_temp ) { 
       wb_state = WB_state_stop;
-      dumper(30);
       break;
     };
 
     // насос 
     if (feed_temp < WB_upper_temp) { pump(OFF); };
-    if ( feed_temp > WB_upper_temp ) {
-      wb_state = WB_state_run;
-      break;
-    };
+    if ( feed_temp > WB_upper_temp ) { pump(ON); };
 
     if ( feed_temp >= WB_overheat_temp ) { 
       wb_state = WB_state_overheat;
