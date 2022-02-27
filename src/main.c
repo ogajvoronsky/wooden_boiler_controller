@@ -226,7 +226,8 @@ void initialize() {
   _start_temp = 0; 
   _dumper_open_position = 100;
   
-  dumper(CLOSED);
+  air_close(6000);
+
   // init spi
   spi = mgos_spi_get_global();
   if (spi == NULL) {
