@@ -30,9 +30,9 @@
 #define WB_burner_pin 0
 /* constants */
 #define WB_temp_resolution 12   // 12-bit resolution
-#define WB_chimney_work_temp 100
-#define WB_chimney_stop_temp 70
-#define WB_chimney_high_temp 170 // chimney temp then dumper move to 30%
+#define WB_chimney_work_temp 80
+#define WB_chimney_stop_temp 60
+#define WB_chimney_high_temp 240 // chimney temp then dumper move to 30%
 #define WB_upper_temp 95
 #define WB_lower_temp 80
 #define WB_overheat_temp 110
