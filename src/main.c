@@ -439,7 +439,7 @@ static void timer_cb(void *arg) {
 // static void mqtt_feed_temp_cb(struct mg_connection *c, const char *topic, int topic_len,
 //                    const char *msg, int msg_len, void *userdata) {
 //  feed_temp = strtof(msg, NULL);
-};
+// };
 // debug
 
 
