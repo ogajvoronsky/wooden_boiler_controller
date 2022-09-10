@@ -10,8 +10,6 @@ mongoose_os_version: ${mos.version}
 tags:
   - c
 
-
-
 # List of files / directories with C sources. No slashes at the end of dir names.
 sources:
   - src
@@ -26,15 +24,21 @@ filesystem:
 
 config_schema:
   # - ["mqtt.pub", "s", "/getData", { title: "Publish topic" }] #MQTT publisher topic
-  - ["mqtt.sub", "s", "/rio/wboiler/#", { title: "Subscription topic" }] #MQTT subscriber topic
+  # - ["mqtt.sub", "s", "/rio/wboiler2/#", { title: "Subscription topic" }] #MQTT subscriber topic
   - ["spi.enable", true]
   - ["spi.debug", true]
 
   - ["feed.sensor.mac", "s", "28:7f:7b:16:a8:01:3c:84", {title: "ROM of sensor on feed pipe"}]
   - ["ret.sensor.mac", "s", "28:0f:57:23:33:19:01:3c", {title: "ROM of sensor on return pipe"}]
 
-  - ["status.topic", "s", "rio/wboiler/status", {title: "mqtt topic for publish status"}]
-  - ["command.topic", "s", "rio/wboiler/command", {title: "mqtt topic for incoming commands"}]
+# mqtt topics 
+  - ["status.topic", "s", "rio/wboiler2/status", {title: "mqtt topic for publish status"}]
+  - ["command.topic", "s", "rio/wboiler2/command", {title: "mqtt topic for incoming commands"}]
+  - ["app.uptemp", "i", 95, { title: "uptemp" } ]  # верхній поріг
+  - ["app.lowtemp", "i", 90, { title: "lowtemp" } ] # нижній поріг
+  - ["app.choke", "i", 30, { title: "choke" } ] # положення заслонки в режимі придушення в % від 0 до 100%
+  - ["app.chimneymax", "i", 160, { title: "chimneymax"} ] # верхня межа т-ри димогазів (прикриваєм повітря)
+  - ["app.dumpertime", "i", 6000, { title: "dumpertime" } ] # час повного відкриття заслонки
 
 build_vars:
   # No HW SPI support on ESP8266, for now.

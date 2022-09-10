@@ -28,22 +28,27 @@
 #define WB_air_on_relay_pin 16
 #define WB_air_off_relay_pin 4
 #define WB_burner_pin 0
-/* constants */
+/* constants (default values) */
 #define WB_temp_resolution 12   // 12-bit resolution
-#define WB_chimney_work_temp 80
-#define WB_chimney_stop_temp 60
-#define WB_chimney_high_temp 240 // chimney temp then dumper move to 30%
-#define WB_upper_temp 95
-#define WB_lower_temp 80
+#define WB_chimney_stop_temp 60 // when eq or lower - switch to stop
+#define WB_chimney_work_temp 80 // when reached - switch to run
 #define WB_overheat_temp 110
 #define WB_pump_on_temp 60
-#define WB_dumper_open_time 5000   // 3s
 #define WB_dumper_idle 5               // air dumper 5% open on idle
 #define WB_heating_up_timeout 1200000  // 20m макс. час за який котел має зреагувати на відкриту заслонку
 #define WB_warming_up_timeout 1200000  // 20m макс. час роботи режиму розігріву перед розпалом
 #define WB_warming_up_setpoint 40      // температура до якої розігрівати котел перед розпалом
-#define WB_burning_up_timeout  1200000 // 20m макс. час роботи фену розпалу
+#define WB_burning_up_timeout  2400000 // 40m макс. час роботи фену розпалу
 #define WB_dumper_close_delay  600000   // 10m час через який закриється заслонка після переходу в стоп
+
+
+/* settings */
+static int WB_upper_temp = 95;   // верхня межа т-ри
+static int WB_lower_temp = 80;   // нижня межа т-ри
+static int WB_chimney_high_temp = 170; // верхня межа димогазів
+static int WB_dumper_choke = 40; // % - положення заслонки в режимі "придушення"
+static int WB_dumper_open_time = 6000; // час за який заслонка відкривається на 100% 
+
 
 /* vars */
 
@@ -123,7 +128,7 @@ void dumper(int8_t state) { // state 0-100%
     air_open(new_position - dumper_state); 
   };
   if ( new_position == CLOSED )  { 
-    air_close(dumper_state + 2000); // +2sec for shure 
+    air_close(dumper_state + 3000); // +3sec for shure 
     dumper_state = new_position;
     return;
   }; 
@@ -214,7 +219,7 @@ void initialize() {
   mgos_gpio_setup_output(WB_burner_pin, OFF);
 
   wb_state = 0;
-  dumper_state = OPEN;
+  dumper_state = CLOSED;
   burner_state = OFF;
   pump_state = OFF;
   chimney_temp = -100;
@@ -226,7 +231,7 @@ void initialize() {
   _start_temp = 0; 
   _dumper_open_position = 100;
   
-  air_close(6000);
+  air_close(10000);
 
   // init spi
   spi = mgos_spi_get_global();
@@ -249,7 +254,12 @@ void wb_tick() {
   sprintf(json_status, "{\"state\":%i,\"dumper\":\"%i\",\"pump\":\"%s\",\"feed\":%.2f,\"return\":%.2f,\"chimney\":%.0f}",
    wb_state, dumper_state, pump_state ? "OFF" : "ON", feed_temp, return_temp, chimney_temp);
   
-  LOG(LL_INFO, ("status: %s", json_status));
+  // DEBUG
+  // LOG(LL_INFO, ("status: %s", json_status));
+  // LOG(LL_INFO, ("up: %i", WB_upper_temp));
+  // LOG(LL_INFO, ("down: %i", WB_lower_temp));
+  // LOG(LL_INFO, ("choke: %i", WB_dumper_choke));
+
   // publish status json to mqtt topic
   mgos_mqtt_pub(mgos_sys_config_get_status_topic(), json_status, strlen(json_status), 1, false);
 
@@ -258,7 +268,7 @@ void wb_tick() {
   case WB_state_stop: {
     pump(OFF);
     if ( chimney_temp >= WB_chimney_work_temp ) { 
-      _start_temp = -1 ; // заходим в роботу з таким значенням щоб уникнути хибних переходів в затухання
+      _start_temp = -1 ; // заходим в роботу з цим значенням щоб уникнути хибних переходів в затухання
       wb_state = WB_state_run;
       if (dumper_close_timerid != 0) {
          mgos_clear_timer(dumper_close_timerid);
@@ -313,14 +323,14 @@ void wb_tick() {
 // Якщо протягом відкритої заслонки т. комина впаде < початкової - затухання
 //
     // комин
-    // притискаєм коли вихлоп надто високий
-    if (chimney_temp >= WB_chimney_high_temp ) { _dumper_open_position = 30; };
-    if (chimney_temp < WB_chimney_high_temp - 30 ) { _dumper_open_position = 100; };
+    // притискаєм коли вихлоп надто високий і котел прогрітий
+    if (chimney_temp >= WB_chimney_high_temp && feed_temp > WB_pump_on_temp ) { _dumper_open_position = WB_dumper_choke; };
+    if (chimney_temp < WB_chimney_high_temp ) { _dumper_open_position = 100; };
 
 
     if (chimney_temp < _start_temp || chimney_temp <= WB_chimney_stop_temp ) {
       wb_state = WB_state_burning_down; 
-      break; 
+      // break; 
     };
 
     if ( feed_temp >= WB_overheat_temp ) {
@@ -339,7 +349,7 @@ void wb_tick() {
     if (feed_temp >= WB_upper_temp-((WB_upper_temp-WB_lower_temp)/2) && 
         feed_temp < WB_upper_temp ) { 
           _start_temp = 0;
-          dumper(30);
+          dumper(WB_dumper_choke);
     };
     
     // насос 
@@ -351,11 +361,8 @@ void wb_tick() {
 
   case WB_state_burning_down: {
     // комин
-    dumper(30);
-    // if (chimney_temp >= _start_temp && _start_temp > 0) {
-    //   wb_state = WB_state_run; 
-    //   break;
-    // };
+    dumper(WB_dumper_choke);
+
     if (chimney_temp >= WB_chimney_work_temp) {
       wb_state = WB_state_run; 
       break;
@@ -425,30 +432,35 @@ static void timer_cb(void *arg) {
 };
 
 // debug - get sensors from openhab items
-// static void mqtt_chimney_temp_cb(struct mg_connection *c, const char *topic, int topic_len,
-//                    const char *msg, int msg_len, void *userdata) {
-//  chimney_temp = strtof(msg, NULL);
-// };
-// static void mqtt_feed_temp_cb(struct mg_connection *c, const char *topic, int topic_len,
-//                    const char *msg, int msg_len, void *userdata) {
-//  feed_temp = strtof(msg, NULL);
-// };
+static void mqtt_chimney_temp_cb(struct mg_connection *c, const char *topic, int topic_len,
+                   const char *msg, int msg_len, void *userdata) {
+ chimney_temp = strtof(msg, NULL);
+};
+static void mqtt_feed_temp_cb(struct mg_connection *c, const char *topic, int topic_len,
+                   const char *msg, int msg_len, void *userdata) {
+ feed_temp = strtof(msg, NULL);
+};
 // debug
 
 
 enum mgos_app_init_result mgos_app_init(void) {
 
-
-  initialize();
+ initialize();
   
-// debug
+// debug - get sensors measurement from mqtt
 //  mgos_mqtt_sub("rio/wboiler/wb_chimney_temp_s", mqtt_chimney_temp_cb, NULL);
 //  mgos_mqtt_sub("rio/wboiler/wb_feed_temp_s", mqtt_feed_temp_cb, NULL); 
 // debug
 
+// subscribe and read params
 mgos_mqtt_sub(mgos_sys_config_get_command_topic(), mqtt_handler_cb, NULL); 
+WB_upper_temp = mgos_sys_config_get_app_uptemp();
+WB_lower_temp = mgos_sys_config_get_app_lowtemp();
+WB_dumper_choke = mgos_sys_config_get_app_choke();
+WB_chimney_high_temp = mgos_sys_config_get_app_chimneymax();
+WB_dumper_open_time = mgos_sys_config_get_app_dumpertime();
 
-  mgos_set_timer(5000 /* ms */, MGOS_TIMER_REPEAT, timer_cb, NULL);
-  
+// work cycle timer (5sec)
+mgos_set_timer(5000 /* ms */, MGOS_TIMER_REPEAT, timer_cb, NULL);
   return MGOS_APP_INIT_SUCCESS;
-}
+};
