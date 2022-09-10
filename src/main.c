@@ -432,13 +432,13 @@ static void timer_cb(void *arg) {
 };
 
 // debug - get sensors from openhab items
-static void mqtt_chimney_temp_cb(struct mg_connection *c, const char *topic, int topic_len,
-                   const char *msg, int msg_len, void *userdata) {
- chimney_temp = strtof(msg, NULL);
-};
-static void mqtt_feed_temp_cb(struct mg_connection *c, const char *topic, int topic_len,
-                   const char *msg, int msg_len, void *userdata) {
- feed_temp = strtof(msg, NULL);
+// static void mqtt_chimney_temp_cb(struct mg_connection *c, const char *topic, int topic_len,
+//                    const char *msg, int msg_len, void *userdata) {
+//  chimney_temp = strtof(msg, NULL);
+// };
+// static void mqtt_feed_temp_cb(struct mg_connection *c, const char *topic, int topic_len,
+//                    const char *msg, int msg_len, void *userdata) {
+//  feed_temp = strtof(msg, NULL);
 };
 // debug
 
