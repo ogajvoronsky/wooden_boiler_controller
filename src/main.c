@@ -30,8 +30,8 @@
 #define WB_burner_pin 0
 /* constants (default values) */
 #define WB_temp_resolution 12   // 12-bit resolution
-#define WB_chimney_stop_temp 60 // when eq or lower - switch to stop
-#define WB_chimney_work_temp 80 // when reached - switch to run
+#define WB_chimney_stop_temp 40 // when eq or lower - switch to stop
+#define WB_chimney_work_temp 70 // when reached - switch to run
 #define WB_overheat_temp 110
 #define WB_pump_on_temp 60
 #define WB_dumper_idle 5               // air dumper 5% open on idle
@@ -46,8 +46,8 @@
 static int WB_upper_temp = 95;   // верхня межа т-ри
 static int WB_lower_temp = 80;   // нижня межа т-ри
 static int WB_chimney_high_temp = 170; // верхня межа димогазів
-static int WB_dumper_choke = 40; // % - положення заслонки в режимі "придушення"
-static int WB_dumper_open_time = 6000; // час за який заслонка відкривається на 100% 
+static int WB_dumper_choke = 50; // % - положення заслонки в режимі "придушення"
+static int WB_dumper_open_time = 5000; // час за який заслонка відкривається на 100% 
 
 
 /* vars */
