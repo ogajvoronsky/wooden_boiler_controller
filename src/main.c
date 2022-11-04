@@ -42,7 +42,7 @@
 #define WB_dumper_close_delay  600000   // 10m час через який закриється заслонка після переходу в стоп
 
 
-/* settings */
+/* settings see mos.yml*/
 static int WB_upper_temp = 95;   // верхня межа т-ри
 static int WB_lower_temp = 80;   // нижня межа т-ри
 static int WB_chimney_high_temp = 170; // верхня межа димогазів
