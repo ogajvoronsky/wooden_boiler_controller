@@ -4,6 +4,7 @@
 #include "mgos_mqtt.h"
 #include "ds18b20.h"
 
+
 /* for gpio. low level = on */
 #define ON false
 #define OFF true
@@ -46,8 +47,8 @@
 static int WB_upper_temp = 95;   // верхня межа т-ри
 static int WB_lower_temp = 80;   // нижня межа т-ри
 static int WB_chimney_high_temp = 170; // верхня межа димогазів
-static int WB_dumper_choke = 40; // % - положення заслонки в режимі "придушення"
-static int WB_dumper_open_time = 6000; // час за який заслонка відкривається на 100% 
+static int WB_dumper_choke = 50; // % - положення заслонки в режимі "придушення"
+static int WB_dumper_open_time = 5000; // час за який заслонка відкривається на 100% 
 
 
 /* vars */
@@ -72,8 +73,43 @@ static int WB_dumper_open_time = 6000; // час за який заслонка 
       .freq = 0
   };
 
+  char *sensors_json = NULL;
+  // Helper for allocating strings
+  #define new_string(len) (char *)malloc(len * sizeof(char))
+
 
 void temperatures_cb(struct ds18b20_result *results) {
+    struct ds18b20_result *p = NULL;
+    int sensors_count = 0;
+    // count results
+    p = results;
+    while ( p != NULL ) {
+      sensors_count++;
+      p = p->next;
+    }
+    // allocate mem for json string
+    if ( sensors_json != NULL ) { free(sensors_json); };
+    sensors_json = new_string(2+(50 * sensors_count)); 
+    // example : [{"mac": "28:7f:7b:16:a8:01:3c:84", "temp": 34.34}]
+
+    // https://gist.github.com/alan-mushi/19546a0e2c6bd4e059fd
+    
+    // build json string
+    p = results;
+    for (size_t i = 0; i < sensors_count; i++)
+    {
+      //розібратися як поліпити стрічки до купи
+      strcat( sensors_json, '[{"mac":"');
+      strcat( sensors_json, p->mac);
+      strcat( sensors_json, '", "temp":');
+      strcat( sensors_json, p->temp );
+      strcat( sensors_json, '}');
+      if ( i < sensors_count) { strcat( sensors_json, ','); };
+      p = p->next;
+    };
+    strcat( sensors_json, ']');
+    // ---------------
+
     // Loop over each result
     while ( results != NULL ) {
         // results->rom - uint8_t - Sensor ROM
@@ -81,7 +117,7 @@ void temperatures_cb(struct ds18b20_result *results) {
         // results->temp - float - Temperature in celsius
         LOG(LL_INFO, ("ROM: %s, Temp: %f\n", results->mac, results->temp));
 
-        // pick measurement
+        // pick measurements
         if (strcmp(results->mac, mgos_sys_config_get_feed_sensor_mac()) == 0) {
           feed_temp = results->temp;
         }; 
