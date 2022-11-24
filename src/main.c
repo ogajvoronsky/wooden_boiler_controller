@@ -343,15 +343,14 @@ void wb_tick() {
   } /* run */
 
   case WB_state_burning_down: {
-    // комин
-    dumper(CLOSED);
-
+    
     if (chimney_temp >= WB_chimney_work_temp) {
       wb_state = WB_state_run; 
       break;
     };
     if ( chimney_temp <= WB_chimney_stop_temp ) { 
       wb_state = WB_state_stop;
+      dumper(CLOSED);
       break;
     };
 
