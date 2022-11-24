@@ -42,7 +42,7 @@
 
 
 /* settings see mos.yml*/
-static int WB_pump_on_temp = 70; // т-ра включення насосу котла
+static int WB_pump_on_temp = 65; // т-ра включення насосу котла
 static int WB_upper_temp = 95;   // верхня межа т-ри
 static int WB_lower_temp = 80;   // нижня межа т-ри
 static int WB_chimney_high_temp = 170; // верхня межа димогазів
