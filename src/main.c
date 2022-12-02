@@ -32,8 +32,8 @@
 /* constants (default values) */
 #define WB_temp_resolution 12   // 12-bit resolution
 #define WB_chimney_stop_temp 40 // when eq or lower - switch to stop
-#define WB_chimney_work_temp 70 // when reached - switch to run
-#define WB_overheat_temp 110
+#define WB_chimney_work_temp 60 // when reached - switch to run
+#define WB_overheat_temp 100
 #define WB_heating_up_timeout 1200000  // 20m макс. час за який котел має зреагувати на відкриту заслонку
 #define WB_warming_up_timeout 1200000  // 20m макс. час роботи режиму розігріву перед розпалом
 #define WB_warming_up_setpoint 40      // температура до якої розігрівати котел перед розпалом
@@ -43,11 +43,9 @@
 
 /* settings see mos.yml*/
 static int WB_pump_on_temp = 65; // т-ра включення насосу котла
-static int WB_upper_temp = 95;   // верхня межа т-ри
-static int WB_lower_temp = 80;   // нижня межа т-ри
-static int WB_chimney_high_temp = 170; // верхня межа димогазів
-static int WB_dumper_choke = 50; // % - положення заслонки в режимі "придушення"
-static int WB_dumper_open_time = 5000; // час за який заслонка відкривається на 100% 
+static int WB_upper_temp = 90;   // верхня межа т-ри
+static int WB_lower_temp = 85;   // нижня межа т-ри
+static int WB_dumper_open_time = 6000; // час за який заслонка відкривається на 100% 
 
 
 /* vars */
@@ -256,7 +254,6 @@ void wb_tick() {
   // LOG(LL_INFO, ("status: %s", json_status));
   // LOG(LL_INFO, ("up: %i", WB_upper_temp));
   // LOG(LL_INFO, ("down: %i", WB_lower_temp));
-  // LOG(LL_INFO, ("choke: %i", WB_dumper_choke));
 
   // publish status json to mqtt topic
   mgos_mqtt_pub(mgos_sys_config_get_status_topic(), json_status, strlen(json_status), 1, false);
@@ -439,8 +436,6 @@ enum mgos_app_init_result mgos_app_init(void) {
 mgos_mqtt_sub(mgos_sys_config_get_command_topic(), mqtt_handler_cb, NULL); 
 WB_upper_temp = mgos_sys_config_get_app_uptemp();
 WB_lower_temp = mgos_sys_config_get_app_lowtemp();
-WB_dumper_choke = mgos_sys_config_get_app_choke();
-WB_chimney_high_temp = mgos_sys_config_get_app_chimneymax();
 WB_dumper_open_time = mgos_sys_config_get_app_dumpertime();
 
 // work cycle timer (5sec)

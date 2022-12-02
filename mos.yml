@@ -35,11 +35,9 @@ config_schema:
   - ["status.topic", "s", "rio/wboiler/status", {title: "mqtt topic for publish status"}]
   - ["command.topic", "s", "rio/wboiler/command", {title: "mqtt topic for incoming commands"}]
 # settings
-  - ["app.uptemp", "i", 95, { title: "uptemp" } ]  # верхній поріг
-  - ["app.lowtemp", "i", 90, { title: "lowtemp" } ] # нижній поріг
-  - ["app.choke", "i", 40, { title: "choke" } ] # положення заслонки в режимі придушення в % від 0 до 100%
-  - ["app.chimneymax", "i", 170, { title: "chimneymax"} ] # верхня межа т-ри димогазів (прикриваєм повітря)
-  - ["app.dumpertime", "i", 5500, { title: "dumpertime" } ] # час повного відкриття заслонки
+  - ["app.uptemp", "i", 90, { title: "uptemp" } ]  # верхній поріг
+  - ["app.lowtemp", "i", 85, { title: "lowtemp" } ] # нижній поріг
+  - ["app.dumpertime", "i", 6000, { title: "dumpertime" } ] # час повного відкриття заслонки
 
 build_vars:
   # No HW SPI support on ESP8266, for now.
