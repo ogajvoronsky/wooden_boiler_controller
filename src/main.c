@@ -52,7 +52,6 @@ static int WB_dumper_open_time = 6000; // час за який заслонка 
 
   static int wb_state;
   static int dumper_state;
-  static int _dumper_open_position;
   static bool burner_state;
   static bool pump_state;
   static float chimney_temp;  
@@ -121,17 +120,15 @@ void dumper(int8_t state) { // state 0-100%
   int new_position;
   new_position = (int) (WB_dumper_open_time * state)/ 100;
   if ( air_dumper_timerid != 0 || dumper_state == new_position ) { return; }
+  
   if ( new_position > dumper_state ) { 
-    air_open(new_position - dumper_state); 
+    air_open(new_position - dumper_state);
   };
-  if ( new_position == CLOSED )  { 
-    air_close(dumper_state + 3000); // +3sec for shure 
-    dumper_state = new_position;
-    return;
+
+  if ( new_position < dumper_state )  { 
+    air_close(dumper_state - new_position ); 
   }; 
-  if ( new_position < dumper_state ) {
-    air_close(dumper_state - new_position);
-  };
+  
   dumper_state = new_position;
 };
 
@@ -225,7 +222,6 @@ void initialize() {
   air_dumper_timerid = 0;
   burning_up_timerid = 0;
   dumper_close_timerid = 0;
-  _dumper_open_position = 100;
   
   air_close(10000);
 
@@ -304,7 +300,7 @@ void wb_tick() {
       burner(OFF);
     } else {
       /* димохід ще холодний */
-      dumper(100);
+      dumper(OPEN);
       pump(OFF);
       burner(ON);
       if ( burning_up_timerid == 0 ) { burning_up_timerid = mgos_set_timer(WB_burning_up_timeout, MGOS_TIMER_REPEAT, burning_up_timeout_cb, NULL); };
@@ -320,12 +316,10 @@ void wb_tick() {
 
     if ( feed_temp >= WB_overheat_temp ) {
       wb_state = WB_state_overheat;
-      dumper(CLOSED);
-      break;
     };
 
     // заслонка
-    if ( feed_temp >= WB_upper_temp && dumper_state == OPEN ) {
+    if ( feed_temp >= WB_upper_temp ) {
       dumper(CLOSED);
     };
     if ( feed_temp <= WB_lower_temp ) { 
