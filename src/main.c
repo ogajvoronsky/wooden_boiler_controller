@@ -33,7 +33,7 @@
 #define WB_temp_resolution 12   // 12-bit resolution
 #define WB_chimney_stop_temp 40 // when eq or lower - switch to stop
 #define WB_chimney_work_temp 60 // when reached - switch to run
-#define WB_overheat_temp 100
+#define WB_overheat_temp 110
 #define WB_heating_up_timeout 1200000  // 20m макс. час за який котел має зреагувати на відкриту заслонку
 #define WB_warming_up_timeout 1200000  // 20m макс. час роботи режиму розігріву перед розпалом
 #define WB_warming_up_setpoint 40      // температура до якої розігрівати котел перед розпалом
@@ -43,8 +43,8 @@
 
 /* settings see mos.yml*/
 static int WB_pump_on_temp = 65; // т-ра включення насосу котла
-static int WB_upper_temp = 90;   // верхня межа т-ри
-static int WB_lower_temp = 85;   // нижня межа т-ри
+static int WB_upper_temp = 95;   // верхня межа т-ри
+static int WB_lower_temp = 86;   // нижня межа т-ри
 static int WB_dumper_open_time = 6000; // час за який заслонка відкривається на 100% 
 
 
