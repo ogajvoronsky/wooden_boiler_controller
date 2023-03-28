@@ -4,7 +4,6 @@
 #include "mgos_mqtt.h"
 #include "ds18b20.h"
 
-
 /* for gpio. low level = on */
 #define ON false
 #define OFF true
@@ -68,50 +67,24 @@ static int WB_dumper_open_time = 6000; // час за який заслонка 
       .mode = 0,
       .freq = 0
   };
-
-  char *sensors_json = NULL;
-  // Helper for allocating strings
-  #define new_string(len) (char *)malloc(len * sizeof(char))
-
+  char sensors_json[400];
 
 void temperatures_cb(struct ds18b20_result *results) {
-    struct ds18b20_result *p = NULL;
-    int sensors_count = 0;
-    // count results
-    p = results;
-    while ( p != NULL ) {
-      sensors_count++;
-      p = p->next;
-    }
-    // allocate mem for json string
-    if ( sensors_json != NULL ) { free(sensors_json); };
-    sensors_json = new_string(2+(50 * sensors_count)); 
-    // example : [{"mac": "28:7f:7b:16:a8:01:3c:84", "temp": 34.34}]
 
-    // https://gist.github.com/alan-mushi/19546a0e2c6bd4e059fd
+  // void sensors_walk(char* buf, struct ds18b20_result *r) {
+  //   char res[400];
+  //   if (r == NULL) { return; };
+  //   sensors_walk(res, r->next);
+  //   sprintf(buf, "{\"mac\":%s,\"temp\":%.2f },%s,%s", r->mac, r->temp, r->next ? ",":"}", res);
+  // };
+  // --- sensors_walk(sensors_json, results);
     
-    // build json string
-    p = results;
-    for (size_t i = 0; i < sensors_count; i++)
-    {
-      //розібратися як поліпити стрічки до купи
-      strcat( sensors_json, '[{"mac":"');
-      strcat( sensors_json, p->mac);
-      strcat( sensors_json, '", "temp":');
-      strcat( sensors_json, p->temp );
-      strcat( sensors_json, '}');
-      if ( i < sensors_count) { strcat( sensors_json, ','); };
-      p = p->next;
-    };
-    strcat( sensors_json, ']');
-    // ---------------
-
-    // Loop over each result
+    // Loop over results and grab temperatures
     while ( results != NULL ) {
         // results->rom - uint8_t - Sensor ROM
         // results->mac - char* - MAC address string
         // results->temp - float - Temperature in celsius
-        LOG(LL_INFO, ("ROM: %s, Temp: %f\n", results->mac, results->temp));
+        //LOG(LL_INFO, ("ROM: %s, Temp: %f\n", results->mac, results->temp));
 
         // pick measurements
         if (strcmp(results->mac, mgos_sys_config_get_feed_sensor_mac()) == 0) {
@@ -120,6 +93,7 @@ void temperatures_cb(struct ds18b20_result *results) {
         if (strcmp(results->mac, mgos_sys_config_get_ret_sensor_mac()) == 0) {
           return_temp = results->temp;
         };
+        
         results = results->next;
     }
     
@@ -270,7 +244,7 @@ void initialize() {
 };
 
 void wb_tick() {
-  char json_status[150];
+  char json_status[500];
 
    // main loop (every 5 sec)
   
@@ -279,13 +253,13 @@ void wb_tick() {
   chimney_temp = read_chimney_temp();
   // ================================================
 
-  sprintf(json_status, "{\"state\":%i,\"dumper\":\"%i\",\"pump\":\"%s\",\"feed\":%.2f,\"return\":%.2f,\"chimney\":%.0f}",
-   wb_state, dumper_state, pump_state ? "OFF" : "ON", feed_temp, return_temp, chimney_temp);
+  sprintf(json_status, "{\"state\":%i,\"dumper\":\"%i\",\"pump\":\"%s\",\"feed\":%.2f,\"return\":%.2f,\"chimney\":%.0f,\"sensors\":%s}",
+   wb_state, dumper_state, pump_state ? "OFF" : "ON", feed_temp, return_temp, chimney_temp, sensors_json);
   
   // DEBUG
-  // LOG(LL_INFO, ("status: %s", json_status));
-  // LOG(LL_INFO, ("up: %i", WB_upper_temp));
-  // LOG(LL_INFO, ("down: %i", WB_lower_temp));
+  LOG(LL_INFO, ("status: %s", json_status));
+  LOG(LL_INFO, ("up: %i", WB_upper_temp));
+  LOG(LL_INFO, ("down: %i", WB_lower_temp));
 
   // publish status json to mqtt topic
   mgos_mqtt_pub(mgos_sys_config_get_status_topic(), json_status, strlen(json_status), 1, false);
@@ -441,7 +415,7 @@ static void timer_cb(void *arg) {
   (void) arg;
 };
 
-// debug - get sensors from openhab items
+// debug - get sensors measurement from mqtt
 // static void mqtt_chimney_temp_cb(struct mg_connection *c, const char *topic, int topic_len,
 //                    const char *msg, int msg_len, void *userdata) {
 //  chimney_temp = strtof(msg, NULL);
