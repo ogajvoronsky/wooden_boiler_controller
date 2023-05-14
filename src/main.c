@@ -67,17 +67,16 @@ static int WB_dumper_open_time = 6000; // час за який заслонка 
       .mode = 0,
       .freq = 0
   };
-  char sensors_json[400];
+  static char sensors_json[400];
 
 void temperatures_cb(struct ds18b20_result *results) {
 
-  // void sensors_walk(char* buf, struct ds18b20_result *r) {
-  //   char res[400];
-  //   if (r == NULL) { return; };
-  //   sensors_walk(res, r->next);
-  //   sprintf(buf, "{\"mac\":%s,\"temp\":%.2f },%s,%s", r->mac, r->temp, r->next ? ",":"}", res);
-  // };
-  // --- sensors_walk(sensors_json, results);
+  void sensors_walk(char* buf, struct ds18b20_result *r) {
+    char res[400] = "\0";
+    if (r->next != NULL) { sensors_walk(res, r->next); } 
+    sprintf(buf, "{\"mac\":\"%s\",\"temp\":%.2f},%s", r->mac, r->temp, res);
+  }
+  sensors_walk(sensors_json, results);
     
     // Loop over results and grab temperatures
     while ( results != NULL ) {
@@ -253,13 +252,13 @@ void wb_tick() {
   chimney_temp = read_chimney_temp();
   // ================================================
 
-  sprintf(json_status, "{\"state\":%i,\"dumper\":\"%i\",\"pump\":\"%s\",\"feed\":%.2f,\"return\":%.2f,\"chimney\":%.0f,\"sensors\":%s}",
+  sprintf(json_status, "{\"state\":%i,\"dumper\":\"%i\",\"pump\":\"%s\",\"feed\":%.2f,\"return\":%.2f,\"chimney\":%.0f,\"sensors\":[%s]}",
    wb_state, dumper_state, pump_state ? "OFF" : "ON", feed_temp, return_temp, chimney_temp, sensors_json);
-  
+
   // DEBUG
-  LOG(LL_INFO, ("status: %s", json_status));
-  LOG(LL_INFO, ("up: %i", WB_upper_temp));
-  LOG(LL_INFO, ("down: %i", WB_lower_temp));
+  // LOG(LL_INFO, ("status: %s", json_status));
+  // LOG(LL_INFO, ("up: %i", WB_upper_temp));
+  // LOG(LL_INFO, ("down: %i", WB_lower_temp));
 
   // publish status json to mqtt topic
   mgos_mqtt_pub(mgos_sys_config_get_status_topic(), json_status, strlen(json_status), 1, false);
@@ -404,7 +403,7 @@ void wb_tick() {
 
 static void timer_cb(void *arg) {
   
-  wb_tick();
+  wb_tick(); // MAIN CYCLE
     
   LOG(LL_INFO,
       ("state: %.2lf, RAM: %lu, %lu free",
