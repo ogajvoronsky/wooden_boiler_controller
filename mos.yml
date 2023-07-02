@@ -36,7 +36,7 @@ config_schema:
   - ["command.topic", "s", "rio/wboiler/command", {title: "mqtt topic for incoming commands"}]
 # settings
   - ["app.uptemp", "i", 95, { title: "uptemp" } ]  # верхній поріг
-  - ["app.lowtemp", "i", 85, { title: "lowtemp" } ] # нижній поріг
+  - ["app.lowtemp", "i", 86, { title: "lowtemp" } ] # нижній поріг
   - ["app.dumpertime", "i", 6000, { title: "dumpertime" } ] # час повного відкриття заслонки
 
 build_vars:
@@ -58,6 +58,7 @@ libs:
   - origin: https://github.com/mongoose-os-libs/rpc-service-config
   - origin: https://github.com/mongoose-os-libs/rpc-service-fs
   - origin: https://github.com/mongoose-os-libs/rpc-uart
+  - origin: https://github.com/mongoose-os-libs/rpc-service-ota
   - origin: https://github.com/mongoose-os-libs/spi
   - origin: https://github.com/mongoose-os-libs/mqtt
   - origin: https://github.com/ogajvoronsky/mongoose-os-ds18b20
