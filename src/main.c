@@ -45,8 +45,8 @@
 
 /* settings see mos.yml*/
 static int WB_pump_on_temp = 65;       // т-ра включення насосу котла
-static int WB_upper_temp = 95;         // верхня межа т-ри
-static int WB_lower_temp = 86;         // нижня межа т-ри
+static int WB_upper_temp = 98;         // верхня межа т-ри
+static int WB_lower_temp = 88;         // нижня межа т-ри
 static int WB_dumper_open_time = 6000; // час за який заслонка відкривається на 100%
 
 /* vars */

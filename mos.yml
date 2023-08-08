@@ -35,8 +35,8 @@ config_schema:
   - ["status.topic", "s", "rio/wboiler/status", {title: "mqtt topic for publish status"}]
   - ["command.topic", "s", "rio/wboiler/command", {title: "mqtt topic for incoming commands"}]
 # settings
-  - ["app.uptemp", "i", 95, { title: "uptemp" } ]  # верхній поріг
-  - ["app.lowtemp", "i", 86, { title: "lowtemp" } ] # нижній поріг
+  - ["app.uptemp", "i", 98, { title: "uptemp" } ]  # верхній поріг
+  - ["app.lowtemp", "i", 88, { title: "lowtemp" } ] # нижній поріг
   - ["app.dumpertime", "i", 6000, { title: "dumpertime" } ] # час повного відкриття заслонки
 
 build_vars:
