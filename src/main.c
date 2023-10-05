@@ -45,9 +45,9 @@
 
 /* settings see mos.yml*/
 static int WB_pump_on_temp = 65;       // т-ра включення насосу котла
-static int WB_upper_temp = 98;         // верхня межа т-ри
-static int WB_lower_temp = 88;         // нижня межа т-ри
-static int WB_dumper_open_time = 6000; // час за який заслонка відкривається на 100%
+static int WB_upper_temp = 100;         // верхня межа т-ри
+static int WB_lower_temp = 90;         // нижня межа т-ри
+static int WB_dumper_open_time = 4000; // час за який заслонка відкривається на 100%
 
 /* vars */
 
@@ -309,7 +309,7 @@ void wb_tick()
   case WB_state_warming_up:
   {
     if (feed_temp < WB_warming_up_setpoint)
-    {
+    { // т-ра менша уставки нагріву - заганяєм теплу воду в котел
       pump(ON);
       dumper(CLOSED);
       if (warm_up_timerid == 0)
@@ -318,7 +318,7 @@ void wb_tick()
       }
     }
     else
-    {
+    { // т-ра >= уставки - скидаєм таймер і переходим до розпалу
       if (warm_up_timerid != 0)
       {
         mgos_clear_timer(warm_up_timerid);
@@ -330,9 +330,10 @@ void wb_tick()
   } /* warming_up */
 
   case WB_state_burning_up:
-  {
+  { // Режим розпалу котла
+    
     if (chimney_temp >= WB_chimney_work_temp)
-    {
+    { // т-ра комина в нормі - котел горить
       if (burning_up_timerid != 0)
       {
         mgos_clear_timer(burning_up_timerid);
@@ -342,23 +343,22 @@ void wb_tick()
       burner(OFF);
     }
     else
-    {
-      /* димохід ще холодний */
+    { // димохід ще холодний - продовжуєм розпалювати
       dumper(OPEN);
       pump(OFF);
       burner(ON);
-      if (burning_up_timerid == 0)
-      {
+      if (burning_up_timerid == 0) 
+      { // сетапим таймер таймауту якщо нема
         burning_up_timerid = mgos_set_timer(WB_burning_up_timeout, MGOS_TIMER_REPEAT, burning_up_timeout_cb, NULL);
       };
     }
-    break;
+    break; 
   } /* burnimg_up */
 
   case WB_state_run:
   {
 
-    // якщо розігрітий і дельта з комином впала - затухання
+    // якщо котел розігрітий і дельта з комином впала і комин холодніший за робочу т-ру - переходим в затухання
     if (feed_temp >= WB_pump_on_temp && chimney_temp - feed_temp <= WB_chimney_stop_diff && 
         chimney_temp < WB_chimney_work_temp )
     {
@@ -366,12 +366,13 @@ void wb_tick()
       break;
     };
 
+    //
     if (feed_temp >= WB_overheat_temp)
     {
       wb_state = WB_state_overheat;
     };
 
-    // заслонка
+    // заслонка логіка роботи
     if (feed_temp >= WB_upper_temp)
     {
       dumper(CLOSED);
@@ -381,7 +382,7 @@ void wb_tick()
       dumper(OPEN);
     };
 
-    // насос
+    // насос логіка роботи
     if (feed_temp >= WB_pump_on_temp)
     {
       pump(ON);
@@ -395,10 +396,10 @@ void wb_tick()
   } /* run */
 
   case WB_state_burning_down:
-  {
+  { 
 
     pump(OFF);
-    dumper(50); // прикрита заслонка, параметризувати?
+    dumper(50); // прикриваєм заслонку (чи потрібно регулювати це з зовні?)
 
     if (chimney_temp >= WB_chimney_work_temp)
     {
@@ -408,7 +409,6 @@ void wb_tick()
     if (chimney_temp <= feed_temp)
     {
       wb_state = WB_state_stop;
-      dumper(CLOSED);
       break;
     };
 
@@ -453,13 +453,13 @@ void wb_tick()
   {
     wb_state = WB_state_burning_up; /* пробуєм розпалювати */
     break;
-  } /* помилка не вдалося нагріти котел перед розпалом */
+  } /* помилка не вдалося повністю нагріти котел перед розпалом */
 
   default:
     break;
   } /*switch*/
 
-} /* tick function */
+} /* кінець робочого циклу */
 
 static void timer_cb(void *arg)
 {
@@ -501,7 +501,7 @@ enum mgos_app_init_result mgos_app_init(void)
   WB_lower_temp = mgos_sys_config_get_app_lowtemp();
   WB_dumper_open_time = mgos_sys_config_get_app_dumpertime();
 
-  // work cycle timer (5sec)
+  // work cycle timer every 5sec
   mgos_set_timer(5000 /* ms */, MGOS_TIMER_REPEAT, timer_cb, NULL);
   return MGOS_APP_INIT_SUCCESS;
 };
