@@ -126,7 +126,7 @@ void air_close(uint16_t t)
 }
 
 void burner(bool state)
-{
+{ // turn on burner
   mgos_gpio_write(WB_burner_pin, state);
   burner_state = state;
 }
@@ -276,8 +276,8 @@ void wb_tick()
   // main loop (every 5 sec)
 
   // ===========    query sensors
-  ds18b20_read_all(WB_ds_sensors_pin, WB_temp_resolution, temperatures_cb);
-  chimney_temp = read_chimney_temp();
+  // ds18b20_read_all(WB_ds_sensors_pin, WB_temp_resolution, temperatures_cb);
+  // chimney_temp = read_chimney_temp();
   // ================================================
 
   sprintf(json_status, "{\"state\":%i,\"dumper\":\"%i\",\"pump\":\"%s\",\"feed\":%.2f,\"return\":%.2f,\"chimney\":%.0f,\"sensors\":[%s]}",
@@ -358,7 +358,6 @@ void wb_tick()
 
   case WB_state_run:
   {
-
     // якщо котел розігрітий і дельта з комином впала і комин холодніший за робочу т-ру - переходим в затухання
     if (feed_temp >= WB_pump_on_temp && chimney_temp - feed_temp <= WB_chimney_stop_diff && 
         chimney_temp < WB_chimney_work_temp )
@@ -476,14 +475,14 @@ static void timer_cb(void *arg)
 };
 
 // debug - get sensors measurement from mqtt
-// static void mqtt_chimney_temp_cb(struct mg_connection *c, const char *topic, int topic_len,
-//                    const char *msg, int msg_len, void *userdata) {
-//  chimney_temp = strtof(msg, NULL);
-// };
-// static void mqtt_feed_temp_cb(struct mg_connection *c, const char *topic, int topic_len,
-//                    const char *msg, int msg_len, void *userdata) {
-//  feed_temp = strtof(msg, NULL);
-// };
+static void mqtt_chimney_temp_cb(struct mg_connection *c, const char *topic, int topic_len,
+                   const char *msg, int msg_len, void *userdata) {
+ chimney_temp = strtof(msg, NULL);
+};
+static void mqtt_feed_temp_cb(struct mg_connection *c, const char *topic, int topic_len,
+                   const char *msg, int msg_len, void *userdata) {
+ feed_temp = strtof(msg, NULL);
+};
 // debug
 
 enum mgos_app_init_result mgos_app_init(void)
@@ -492,8 +491,8 @@ enum mgos_app_init_result mgos_app_init(void)
   initialize();
 
   // debug - get sensors measurement from mqtt
-  //  mgos_mqtt_sub("rio/wboiler/wb_chimney_temp_s", mqtt_chimney_temp_cb, NULL);
-  //  mgos_mqtt_sub("rio/wboiler/wb_feed_temp_s", mqtt_feed_temp_cb, NULL);
+   mgos_mqtt_sub("rio/wboiler/wb_chimney_temp_s", mqtt_chimney_temp_cb, NULL);
+   mgos_mqtt_sub("rio/wboiler/wb_feed_temp_s", mqtt_feed_temp_cb, NULL);
   // debug
 
   // subscribe and read params
