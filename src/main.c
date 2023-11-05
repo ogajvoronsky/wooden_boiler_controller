@@ -35,8 +35,8 @@
 
 /* constants (default values) */
 #define WB_temp_resolution 12    // 12-bit resolution
-#define WB_chimney_stop_diff 20  // якщо комин на 20 або менше гарячіший подачі - перехід в затухання.
-#define WB_chimney_work_temp 100 // when reached - switch to run
+#define WB_chimney_stop_diff 2  // якщо комин на 2 або менше гарячіший подачі - перехід в затухання.
+#define WB_chimney_work_temp 80 // when reached - switch to run
 #define WB_overheat_temp 110
 #define WB_heating_up_timeout 1200000 // 20m макс. час за який котел має зреагувати на відкриту заслонку
 #define WB_warming_up_timeout 1200000 // 20m макс. час роботи режиму розігріву перед розпалом
@@ -271,7 +271,7 @@ void initialize()
 
 void wb_tick()
 {
-  char json_status[600];
+  char json_status[1000];
 
   // main loop (every 5 sec)
 
@@ -340,6 +340,7 @@ void wb_tick()
         burning_up_timerid = 0;
       };
       wb_state = WB_state_run;
+      // TO-DO: Закриваєм заслонку прямого ходу
       burner(OFF);
     }
     else
@@ -365,7 +366,7 @@ void wb_tick()
       wb_state = WB_state_burning_down;
       break;
     };
-
+    
     //
     if (feed_temp >= WB_overheat_temp)
     {
