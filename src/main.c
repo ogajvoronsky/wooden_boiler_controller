@@ -3,10 +3,10 @@
 #include "mgos_spi.h"
 #include "mgos_mqtt.h"
 #include "ds18b20.h"
-#include "mgos_rpc_service_ota.h"
-#include "mg_rpc.h"
+//#include "mgos_rpc_service_ota.h"
+//#include "mg_rpc.h"
 
-
+//#define TEST
 
 /* for gpio. low level = on */
 #define ON false
@@ -35,7 +35,7 @@
 
 /* constants (default values) */
 #define WB_temp_resolution 12    // 12-bit resolution
-#define WB_chimney_stop_diff 2  // якщо комин на 2 або менше гарячіший подачі - перехід в затухання.
+#define WB_chimney_stop_diff 10  // якщо комин на 10 або менше гарячіший подачі - перехід в затухання.
 #define WB_chimney_work_temp 80 // when reached - switch to run
 #define WB_overheat_temp 110
 #define WB_heating_up_timeout 1200000 // 20m макс. час за який котел має зреагувати на відкриту заслонку
@@ -50,7 +50,7 @@ static int WB_lower_temp = 90;         // нижня межа т-ри
 static int WB_dumper_open_time = 4000; // час за який заслонка відкривається на 100%
 
 /* vars */
-
+static char json_status[1600];
 static int wb_state;
 static int dumper_state;
 static bool burner_state;
@@ -65,8 +65,9 @@ struct mgos_spi *spi;
 struct mgos_spi_txn txn = {
     .cs = 0, /* Use CS0 line as configured by cs0_gpio */
     .mode = 0,
-    .freq = 0};
-static char sensors_json[400];
+    .freq = 0 };
+
+static char sensors_json[1000];
 
 void temperatures_cb(struct ds18b20_result *results)
 {
@@ -241,6 +242,19 @@ float read_chimney_temp()
   return rv * 0.25;
 };
 
+void reset_timers()
+{
+  if (burning_up_timerid != 0) {
+      mgos_clear_timer(burning_up_timerid);
+        burning_up_timerid = 0;
+    }
+  if (warm_up_timerid != 0)
+      {
+        mgos_clear_timer(warm_up_timerid);
+        warm_up_timerid = 0;
+      };
+}
+
 void initialize()
 {
   mgos_gpio_setup_output(WB_air_off_relay_pin, OFF);
@@ -271,30 +285,39 @@ void initialize()
 
 void wb_tick()
 {
-  char json_status[1000];
-
   // main loop (every 5 sec)
 
   // ===========    query sensors
-  // ds18b20_read_all(WB_ds_sensors_pin, WB_temp_resolution, temperatures_cb);
-  // chimney_temp = read_chimney_temp();
+  #ifndef TEST
+    ds18b20_read_all(WB_ds_sensors_pin, WB_temp_resolution, temperatures_cb);
+    chimney_temp = read_chimney_temp();
+  #endif
   // ================================================
 
   sprintf(json_status, "{\"state\":%i,\"dumper\":\"%i\",\"pump\":\"%s\",\"feed\":%.2f,\"return\":%.2f,\"chimney\":%.0f,\"sensors\":[%s]}",
           wb_state, dumper_state, pump_state ? "OFF" : "ON", feed_temp, return_temp, chimney_temp, sensors_json);
 
   // DEBUG
-  // LOG(LL_INFO, ("status: %s", json_status));
-  // LOG(LL_INFO, ("up: %i", WB_upper_temp));
-  // LOG(LL_INFO, ("down: %i", WB_lower_temp));
+  #ifdef TEST
+    LOG(LL_INFO, ("status: %s", json_status));
+  #endif
+  
 
   // publish status json to mqtt topic
-  mgos_mqtt_pub(mgos_sys_config_get_status_topic(), json_status, strlen(json_status), 1, false);
+  #ifdef TEST
+   mgos_mqtt_pub("rio/wboiler2/status", json_status, strlen(json_status), 1, false);
+  #endif
+
+  #ifndef TEST
+    mgos_mqtt_pub(mgos_sys_config_get_status_topic(), json_status, strlen(json_status), 1, false);
+  #endif
 
   switch (wb_state)
   {
   case WB_state_stop:
   {
+    reset_timers();
+    burner(OFF);
     pump(OFF);
     dumper(CLOSED);
     if (chimney_temp >= WB_chimney_work_temp)
@@ -340,7 +363,6 @@ void wb_tick()
         burning_up_timerid = 0;
       };
       wb_state = WB_state_run;
-      // TO-DO: Закриваєм заслонку прямого ходу
       burner(OFF);
     }
     else
@@ -358,14 +380,15 @@ void wb_tick()
 
   case WB_state_run:
   {
-    // якщо котел розігрітий і дельта з комином впала і комин холодніший за робочу т-ру - переходим в затухання
-    if (feed_temp >= WB_pump_on_temp && chimney_temp - feed_temp <= WB_chimney_stop_diff && 
-        chimney_temp < WB_chimney_work_temp )
+    // якщо котел розігрітий дельта з комином впала і комин холодніший за робочу т-ру - переходим в затухання
+    if ( (feed_temp >= WB_pump_on_temp) && (chimney_temp - feed_temp <= WB_chimney_stop_diff) && (chimney_temp < WB_chimney_work_temp) )
     {
       wb_state = WB_state_burning_down;
-      break;
     };
     
+    // Переходим в стоп якщо холодний
+    if (feed_temp < 30 && chimney_temp < 30) { wb_state = WB_state_stop; }
+
     //
     if (feed_temp >= WB_overheat_temp)
     {
@@ -397,9 +420,8 @@ void wb_tick()
 
   case WB_state_burning_down:
   { 
-
     pump(OFF);
-    dumper(50); // прикриваєм заслонку (чи потрібно регулювати це з зовні?)
+    dumper(50); // прикриваєм заслонку (чи потрібно отримувати цей пераметр з зовні?)
 
     if (chimney_temp >= WB_chimney_work_temp)
     {
@@ -466,23 +488,25 @@ static void timer_cb(void *arg)
 
   wb_tick(); // MAIN CYCLE
 
-  LOG(LL_INFO,
-      ("state: %.2lf, RAM: %lu, %lu free",
-       mgos_uptime(), (unsigned long)mgos_get_heap_size(),
-       (unsigned long)mgos_get_free_heap_size()));
+  // LOG(LL_INFO,
+  //     ("state: %.2lf, RAM: %lu, %lu free",
+  //      mgos_uptime(), (unsigned long)mgos_get_heap_size(),
+  //      (unsigned long)mgos_get_free_heap_size()));
 
   (void)arg;
 };
 
 // debug - get sensors measurement from mqtt
-static void mqtt_chimney_temp_cb(struct mg_connection *c, const char *topic, int topic_len,
-                   const char *msg, int msg_len, void *userdata) {
- chimney_temp = strtof(msg, NULL);
-};
-static void mqtt_feed_temp_cb(struct mg_connection *c, const char *topic, int topic_len,
-                   const char *msg, int msg_len, void *userdata) {
- feed_temp = strtof(msg, NULL);
-};
+#ifdef TEST
+  static void mqtt_chimney_temp_cb(struct mg_connection *c, const char *topic, int topic_len,
+                    const char *msg, int msg_len, void *userdata) {
+  chimney_temp = strtof(msg, NULL);
+  };
+  static void mqtt_feed_temp_cb(struct mg_connection *c, const char *topic, int topic_len,
+                    const char *msg, int msg_len, void *userdata) {
+  feed_temp = strtof(msg, NULL);
+  };
+#endif
 // debug
 
 enum mgos_app_init_result mgos_app_init(void)
@@ -491,8 +515,10 @@ enum mgos_app_init_result mgos_app_init(void)
   initialize();
 
   // debug - get sensors measurement from mqtt
-   mgos_mqtt_sub("rio/wboiler/wb_chimney_temp_s", mqtt_chimney_temp_cb, NULL);
-   mgos_mqtt_sub("rio/wboiler/wb_feed_temp_s", mqtt_feed_temp_cb, NULL);
+  #ifdef TEST
+   mgos_mqtt_sub("rio/wboiler2/wb_chimney_temp_s", mqtt_chimney_temp_cb, NULL);
+   mgos_mqtt_sub("rio/wboiler2/wb_feed_temp_s", mqtt_feed_temp_cb, NULL);
+  #endif
   // debug
 
   // subscribe and read params

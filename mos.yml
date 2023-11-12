@@ -32,11 +32,11 @@ config_schema:
   - ["ret.sensor.mac", "s", "28:0f:57:23:33:19:01:3c", {title: "ROM of sensor on return pipe"}]
 
 # mqtt topics 
-  - ["status.topic", "s", "rio/wboiler2/status", {title: "mqtt topic for publish status"}]
-  - ["command.topic", "s", "rio/wboiler2/command", {title: "mqtt topic for incoming commands"}]
+  - ["status.topic", "s", "rio/wboiler/status", {title: "mqtt topic for publish status"}]
+  - ["command.topic", "s", "rio/wboiler/command", {title: "mqtt topic for incoming commands"}]
 # settings
   - ["app.uptemp", "i", 100, { title: "uptemp" } ]  # верхній поріг
-  - ["app.lowtemp", "i", 90, { title: "lowtemp" } ] # нижній поріг
+  - ["app.lowtemp", "i", 95, { title: "lowtemp" } ] # нижній поріг
   - ["app.dumpertime", "i", 4000, { title: "dumpertime" } ] # час повного відкриття заслонки
 
 build_vars:
