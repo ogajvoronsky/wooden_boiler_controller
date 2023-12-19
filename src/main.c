@@ -3,6 +3,7 @@
 #include "mgos_spi.h"
 #include "mgos_mqtt.h"
 #include "ds18b20.h"
+
 //#include "mgos_rpc_service_ota.h"
 //#include "mg_rpc.h"
 
@@ -381,7 +382,7 @@ void wb_tick()
   case WB_state_run:
   {
     // якщо котел розігрітий дельта з комином впала і комин холодніший за робочу т-ру - переходим в затухання
-    if ( (feed_temp >= WB_pump_on_temp) && (chimney_temp - feed_temp <= WB_chimney_stop_diff) && (chimney_temp < WB_chimney_work_temp) )
+    if ( (feed_temp >= WB_pump_on_temp) && (chimney_temp - feed_temp <= WB_chimney_stop_diff) )
     {
       wb_state = WB_state_burning_down;
     };
@@ -423,7 +424,7 @@ void wb_tick()
     pump(OFF);
     dumper(50); // прикриваєм заслонку (чи потрібно отримувати цей пераметр з зовні?)
 
-    if (chimney_temp >= WB_chimney_work_temp)
+    if (feed_temp > WB_lower_temp)
     {
       wb_state = WB_state_run;
       break;
