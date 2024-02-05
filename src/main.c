@@ -36,19 +36,18 @@
 
 /* constants (default values) */
 #define WB_temp_resolution 12    // 12-bit resolution
-#define WB_chimney_stop_diff 10  // якщо комин на 10 або менше гарячіший подачі - перехід в затухання.
-#define WB_chimney_work_temp 80 // when reached - switch to run
-#define WB_overheat_temp 110
-#define WB_heating_up_timeout 1200000 // 20m макс. час за який котел має зреагувати на відкриту заслонку
+#define WB_chimney_stop_diff 20  // якщо комин на 20 або менше гарячіший подачі - перехід в затухання.
+#define WB_chimney_work_temp 60 // when reached - switch to run
+#define WB_overheat_temp 115
 #define WB_warming_up_timeout 1200000 // 20m макс. час роботи режиму розігріву перед розпалом
 #define WB_warming_up_setpoint 30     // температура до якої розігрівати котел перед розпалом
 #define WB_burning_up_timeout 2400000 // 40m макс. час роботи фену розпалу
 
 /* settings see mos.yml*/
 static int WB_pump_on_temp = 65;       // т-ра включення насосу котла
-static int WB_upper_temp = 100;         // верхня межа т-ри
-static int WB_lower_temp = 90;         // нижня межа т-ри
-static int WB_dumper_open_time = 4000; // час за який заслонка відкривається на 100%
+static int WB_upper_temp = 110;         // верхня межа т-ри
+static int WB_lower_temp = 105;         // нижня межа т-ри
+static int WB_dumper_open_time = 5000; // час за який заслонка відкривається на 100%
 
 /* vars */
 static char json_status[1600];
@@ -369,7 +368,7 @@ void wb_tick()
     else
     { // димохід ще холодний - продовжуєм розпалювати
       dumper(OPEN);
-      pump(OFF);
+      pump(ON);
       burner(ON);
       if (burning_up_timerid == 0) 
       { // сетапим таймер таймауту якщо нема
@@ -381,8 +380,10 @@ void wb_tick()
 
   case WB_state_run:
   {
+    dumper(100);
     // якщо котел розігрітий дельта з комином впала і комин холодніший за робочу т-ру - переходим в затухання
-    if ( (feed_temp >= WB_pump_on_temp) && (chimney_temp - feed_temp <= WB_chimney_stop_diff) )
+    if ( (feed_temp >= WB_pump_on_temp) && (chimney_temp - feed_temp <= WB_chimney_stop_diff) &&
+         feed_temp < WB_upper_temp )
     {
       wb_state = WB_state_burning_down;
     };
@@ -406,16 +407,8 @@ void wb_tick()
       dumper(OPEN);
     };
 
-    // насос логіка роботи
-    if (feed_temp >= WB_pump_on_temp)
-    {
-      pump(ON);
-    }
-    if (feed_temp < WB_pump_on_temp)
-    {
-      pump(OFF);
-    }
-
+    // насос
+    pump(ON);
     break;
   } /* run */
 
@@ -424,9 +417,10 @@ void wb_tick()
     pump(OFF);
     dumper(50); // прикриваєм заслонку (чи потрібно отримувати цей пераметр з зовні?)
 
-    if (feed_temp > WB_lower_temp)
+    if (feed_temp >= WB_upper_temp)
     {
       wb_state = WB_state_run;
+      dumper(100);
       break;
     };
     if (chimney_temp <= feed_temp)
