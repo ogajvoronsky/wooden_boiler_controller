@@ -7,7 +7,7 @@
 //#include "mgos_rpc_service_ota.h"
 //#include "mg_rpc.h"
 
-//#define TEST
+// #define TEST
 
 /* for gpio. low level = on */
 #define ON false
@@ -36,22 +36,22 @@
 
 /* constants (default values) */
 #define WB_temp_resolution 12    // 12-bit resolution
-#define WB_chimney_stop_diff 20  // якщо комин на 20 або менше гарячіший подачі - перехід в затухання.
-#define WB_chimney_work_temp 60 // when reached - switch to run
-#define WB_overheat_temp 115
+#define WB_chimney_work_temp 66 // when reached - switch to run
+#define WB_overheat_temp 110
+#define WB_pump_temp 70  // т-ра включення ЦН
 #define WB_warming_up_timeout 1200000 // 20m макс. час роботи режиму розігріву перед розпалом
 #define WB_warming_up_setpoint 30     // температура до якої розігрівати котел перед розпалом
 #define WB_burning_up_timeout 2400000 // 40m макс. час роботи фену розпалу
 
 /* settings see mos.yml*/
-static int WB_pump_on_temp = 65;       // т-ра включення насосу котла
-static int WB_upper_temp = 110;         // верхня межа т-ри
-static int WB_lower_temp = 105;         // нижня межа т-ри
+static int WB_upper_temp = 107;         // верхня межа т-ри
+static int WB_lower_temp = 100;         // нижня межа т-ри
 static int WB_dumper_open_time = 5000; // час за який заслонка відкривається на 100%
 
 /* vars */
 static char json_status[1600];
 static int wb_state;
+bool starting;
 static int dumper_state;
 static bool burner_state;
 static bool pump_state;
@@ -191,6 +191,7 @@ void mqtt_handler_cb(struct mg_connection *c, const char *topic, int topic_len,
   { // stop
     LOG(LL_INFO, ("%s", "STOP received"));
     wb_state = WB_state_stop;
+    dumper(CLOSED);
     break;
   }
   case 1:
@@ -262,6 +263,7 @@ void initialize()
   mgos_gpio_setup_output(WB_pump_pin, OFF);
   mgos_gpio_setup_output(WB_burner_pin, OFF);
 
+  starting = false;
   wb_state = 0;
   dumper_state = CLOSED;
   burner_state = OFF;
@@ -320,8 +322,10 @@ void wb_tick()
     burner(OFF);
     pump(OFF);
     dumper(CLOSED);
-    if (chimney_temp >= WB_chimney_work_temp)
+    //if ( feed_temp < 35 || feed_temp >= WB_lower_temp ) { empty = false; }
+    if (chimney_temp >= WB_chimney_work_temp || feed_temp >= WB_lower_temp )
     {
+      starting = true;
       wb_state = WB_state_run;
       break;
     };
@@ -357,6 +361,7 @@ void wb_tick()
     
     if (chimney_temp >= WB_chimney_work_temp)
     { // т-ра комина в нормі - котел горить
+      starting = true;
       if (burning_up_timerid != 0)
       {
         mgos_clear_timer(burning_up_timerid);
@@ -380,16 +385,26 @@ void wb_tick()
 
   case WB_state_run:
   {
-    dumper(100);
-    // якщо котел розігрітий дельта з комином впала і комин холодніший за робочу т-ру - переходим в затухання
-    if ( (feed_temp >= WB_pump_on_temp) && (chimney_temp - feed_temp <= WB_chimney_stop_diff) &&
-         feed_temp < WB_upper_temp )
+    dumper(OPEN);
+    // DEBUG
+    #ifdef TEST
+      LOG(LL_INFO, ("starting: %d", starting));
+    #endif
+  
+    // якщо комин холодніший за робочу т-ру і не в розпалі - переходим в затухання
+
+    if ( (chimney_temp <= WB_chimney_work_temp) && !starting )
     {
       wb_state = WB_state_burning_down;
     };
-    
+    // якщо вийшли на режим - обнуляєм прапор старту
+    if ( feed_temp > WB_pump_temp && chimney_temp > WB_chimney_work_temp ) { starting = false; }
+
     // Переходим в стоп якщо холодний
-    if (feed_temp < 30 && chimney_temp < 30) { wb_state = WB_state_stop; }
+    if (feed_temp < 38 && chimney_temp < 38) { 
+      starting=false;
+      wb_state = WB_state_stop; 
+    }
 
     //
     if (feed_temp >= WB_overheat_temp)
@@ -406,28 +421,32 @@ void wb_tick()
     {
       dumper(OPEN);
     };
-
     // насос
-    pump(ON);
+    if ( (feed_temp - return_temp) > 10 || feed_temp >= WB_pump_temp ) 
+      { pump(ON); } else { pump(OFF); };
+
     break;
   } /* run */
 
   case WB_state_burning_down:
   { 
     pump(OFF);
+    starting=false;
     dumper(50); // прикриваєм заслонку (чи потрібно отримувати цей пераметр з зовні?)
 
-    if (feed_temp >= WB_upper_temp)
-    {
+    if ((feed_temp >= WB_pump_temp && chimney_temp >= WB_pump_temp + 10) || feed_temp >= WB_lower_temp)
+    { // напевно підкинули дрова переходим в роботу
+      starting = true;
       wb_state = WB_state_run;
-      dumper(100);
       break;
     };
-    if (chimney_temp <= feed_temp)
-    {
-      wb_state = WB_state_stop;
+    
+    // Переходим в стоп якщо холодний
+    if ( chimney_temp < 40) { 
+      starting=false;
+      wb_state = WB_state_stop; 
       break;
-    };
+    }
 
     if (feed_temp >= WB_overheat_temp)
     {
@@ -501,6 +520,10 @@ static void timer_cb(void *arg)
                     const char *msg, int msg_len, void *userdata) {
   feed_temp = strtof(msg, NULL);
   };
+  static void mqtt_ret_temp_cb(struct mg_connection *c, const char *topic, int topic_len,
+                    const char *msg, int msg_len, void *userdata) {
+  return_temp = strtof(msg, NULL);
+  };
 #endif
 // debug
 
@@ -513,6 +536,7 @@ enum mgos_app_init_result mgos_app_init(void)
   #ifdef TEST
    mgos_mqtt_sub("rio/wboiler2/wb_chimney_temp_s", mqtt_chimney_temp_cb, NULL);
    mgos_mqtt_sub("rio/wboiler2/wb_feed_temp_s", mqtt_feed_temp_cb, NULL);
+   mgos_mqtt_sub("rio/wboiler2/wb_ret_temp_s",mqtt_ret_temp_cb, NULL);
   #endif
   // debug
 
