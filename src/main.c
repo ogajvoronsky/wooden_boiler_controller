@@ -548,5 +548,9 @@ enum mgos_app_init_result mgos_app_init(void)
 
   // work cycle timer every 5sec
   mgos_set_timer(5000 /* ms */, MGOS_TIMER_REPEAT, timer_cb, NULL);
+  
+
+  
   return MGOS_APP_INIT_SUCCESS;
+
 };
