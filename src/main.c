@@ -7,7 +7,7 @@
 //#include "mgos_rpc_service_ota.h"
 //#include "mg_rpc.h"
 
-// #define TEST
+// #define TEST 
 
 /* for gpio. low level = on */
 #define ON false
@@ -28,11 +28,11 @@
 #define WB_state_warming_up_timeout -2
 #define WB_state_sensor_error -3
 /* pins */
-#define WB_ds_sensors_pin 5
-#define WB_pump_pin 2
-#define WB_air_on_relay_pin 16
-#define WB_air_off_relay_pin 4
-#define WB_burner_pin 0
+#define WB_ds_sensors_pin 5 // D1
+#define WB_pump_pin 2  //D4
+#define WB_air_on_relay_pin 16 //D0
+#define WB_air_off_relay_pin 4  // D2
+#define WB_burner_pin 0 //D3
 
 /* constants (default values) */
 #define WB_temp_resolution 12    // 12-bit resolution
