@@ -254,7 +254,7 @@ void reset_timers()
         mgos_clear_timer(warm_up_timerid);
         warm_up_timerid = 0;
       };
-}
+};
 
 void initialize()
 {
@@ -313,7 +313,8 @@ void wb_tick()
   #ifndef TEST
     mgos_mqtt_pub(mgos_sys_config_get_status_topic(), json_status, strlen(json_status), 1, false);
   #endif
-
+  
+  
   switch (wb_state)
   {
   case WB_state_stop:
@@ -443,10 +444,10 @@ void wb_tick()
     
     // Переходим в стоп якщо холодний
     if ( chimney_temp < 40) { 
-      starting=false;
+      starting = false;
       wb_state = WB_state_stop; 
       break;
-    }
+    };
 
     if (feed_temp >= WB_overheat_temp)
     {
@@ -495,7 +496,7 @@ void wb_tick()
     break;
   } /*switch*/
 
-} /* кінець робочого циклу */
+}; /* кінець робочого циклу */
 
 static void timer_cb(void *arg)
 {

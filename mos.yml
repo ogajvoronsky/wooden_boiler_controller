@@ -52,6 +52,7 @@ conds:
         - ["spi.cs0_gpio", 15]
 
 libs:
+ 
   - origin: https://github.com/mongoose-os-libs/boards
   - origin: https://github.com/mongoose-os-libs/ca-bundle
   - origin: https://github.com/mongoose-os-libs/rpc-service-config
