@@ -47,6 +47,8 @@
 static int WB_upper_temp = 107;         // верхня межа т-ри
 static int WB_lower_temp = 100;         // нижня межа т-ри
 static int WB_dumper_open_time = 5000; // час за який заслонка відкривається на 100%
+static int MQTT_errors = 0; // mqtt errors counter
+static int MQTT_errors_limit = 50; // mqtt errors limit
 
 /* vars */
 static char json_status[1600];
@@ -288,6 +290,14 @@ void initialize()
 void wb_tick()
 {
   // main loop (every 5 sec)
+  if (MQTT_errors > MQTT_errors_limit)
+  {
+    LOG(LL_ERROR, ("MQTT errors limit reached"));
+    mgos_system_restart();
+    return;
+  };
+
+
 
   // ===========    query sensors
   #ifndef TEST
@@ -311,7 +321,10 @@ void wb_tick()
   #endif
 
   #ifndef TEST
-    mgos_mqtt_pub(mgos_sys_config_get_status_topic(), json_status, strlen(json_status), 1, false);
+    if (mgos_mqtt_pub(mgos_sys_config_get_status_topic(), json_status, strlen(json_status), 1, false) == 0) {
+      MQTT_errors++;
+    }
+
   #endif
   
   
@@ -549,5 +562,9 @@ enum mgos_app_init_result mgos_app_init(void)
 
   // work cycle timer every 5sec
   mgos_set_timer(5000 /* ms */, MGOS_TIMER_REPEAT, timer_cb, NULL);
+  
+
+  
   return MGOS_APP_INIT_SUCCESS;
+
 };
