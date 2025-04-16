@@ -277,12 +277,12 @@ void initialize()
   air_close(10000);
 
   // init spi
-  spi = mgos_spi_get_global();
-  if (spi == NULL)
-  {
-    LOG(LL_ERROR, ("SPI is not configured, make sure spi.enable is true"));
-    return;
-  };
+  // spi = mgos_spi_get_global();
+  // if (spi == NULL)
+  // {
+  //   LOG(LL_ERROR, ("SPI is not configured, make sure spi.enable is true"));
+  //   return;
+  // };
 };
 
 void wb_tick()
@@ -292,7 +292,7 @@ void wb_tick()
   // ===========    query sensors
   #ifndef TEST
     ds18b20_read_all(WB_ds_sensors_pin, WB_temp_resolution, temperatures_cb);
-    chimney_temp = read_chimney_temp();
+    // chimney_temp = read_chimney_temp();
   #endif
   // ================================================
 
